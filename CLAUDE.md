@@ -76,11 +76,25 @@ garbage.
 ### Game modes
 
 `MODES[]` near the top is the single source of truth for mode behaviour — name,
-blurb, starting level, lines-per-level and the gravity curve. There are **no
-hard-coded 800/70/80/10 constants anywhere in the rules engine**; it reads them
-off `Game::mode`. Adding a mode is one row in that table plus a `blurb`. The id
-string is the stable key used in the score file, so **never change an existing
-id** — doing so orphans everyone's saved scores.
+blurb, starting level, lines-per-level, the gravity curve, and any objective
+(`goal_lines`, `time_limit_sec`) or ranking rule (`rank_by_time`). There are **no
+hard-coded 800 / 70 / 80 / 10 / 40 / 120 constants anywhere else in the file**;
+the engine reads them off `Game::mode`. Adding a mode is one row in that table
+plus a `blurb`.
+
+The id string is the stable key used in the score file, so **never change an
+existing id** — doing so orphans everyone's saved scores.
+
+`mode_is_timed()` really means "has an objective"; the HUD uses it to choose
+between a Level readout and a clock. `check_objective()` runs once per unpaused
+frame and is the only place a run can end without topping out. It sets `over`
+plus either `cleared` or `timed_out`, and `draw()` turns that into the panel
+title (`CLEARED` / `TIME UP` / `GAME OVER`).
+
+Time-ranked modes sort **ascending** — fastest first — via `entry_better()`.
+`qualifies()` refuses an entry with no recorded time, so an abandoned Sprint can
+never post an unbeatable short time. `run_game()` only stamps `elapsed_ms` when
+`cleared` is set, which is the other half of that guard.
 
 ### Screen state machine
 
@@ -126,8 +140,13 @@ never stop the game from being playable.
 Line format, one entry per line, comments start with `#`:
 
 ```
-<mode-id> <initials> <score> <level> <lines> <YYYY-MM-DD>
+<mode-id> <initials> <score> <level> <lines> <YYYY-MM-DD> [<elapsed_ms>]
 ```
+
+The trailing time is **optional on purpose**: files written before timed modes
+existed must keep loading, and a row without a time sorts last on a time-ranked
+board. Parse it with a `>= 6` check on the `sscanf` return, not `== 7`, and
+`memset` the entry first so the field is defined when the conversion is absent.
 
 `insert_score()` maintains a sorted top-`MAX_SCORES`, so reading the file **in
 any order** gives the same result. That is what makes a hand-edited file safe.
@@ -163,10 +182,41 @@ run in a plain shell — it needs a pty. The pattern that works:
   produces convincing but entirely fake "bugs".
 - Point `XDG_DATA_HOME` at a temp directory so tests never touch real scores.
 
+Two traps worth knowing, both of which produce *convincing fake bugs*:
+
+- **Teardown hangs on the initials prompt.** If a run ends with a qualifying
+  score, the game sits waiting for initials. A bare `q` just types a letter into
+  it, so the child never exits and an unbounded `waitpid` blocks forever. Send
+  `Esc` first to dismiss the prompt, then reap with `WNOHANG` in a bounded loop,
+  with `SIGKILL` as the backstop.
+- **Reading the active piece has to scan vertically.** The piece spawns at box
+  `x = 3`, but gravity can tick between a lock and your read, moving it to
+  `y = 1` before you look — so matching only at `y = 0` fails intermittently and
+  then keeps failing for the whole fall. Scan `y` offsets 0..8 for the
+  rotation-0 pattern. The vertical position is irrelevant anyway: the landing
+  row is the same wherever the piece currently sits, so all you need is its
+  identity.
+
+Exercising the end conditions needs a player, not just keypresses. A small
+greedy placement bot is enough: keep your own board model, read only the piece
+identity off the screen, and simulate each rotation/column to score placements
+by lines cleared minus bumpiness, holes and max height. One of those cleared
+Sprint's full 40 lines, which is what actually proved the goal path end to end.
+
+For an end condition too slow to reach honestly — Ultra's 120-second clock,
+which a bot that tops out first never sees — build a variant **in `/tmp`** with
+the constant shortened (`sed` the `time_limit_sec` field of that mode's row) and
+drive that instead. Same code path, different constant. Afterwards confirm the
+shipped source still holds the real value; never test by editing the repo file.
+
 Check by hand after touching rules or screens:
 
 - Rotating flush against each of the four walls (wall kicks).
 - Clearing a single line, and a tetris at once.
+- Each mode's HUD: Level for Marathon and Expert, a counting-**up** clock plus
+  `N/40` for Sprint, a counting-**down** clock for Ultra.
+- Sprint ending at exactly 40 lines: `CLEARED` panel, a time written to the
+  score file, and a TIME-ranked board with the fastest first.
 - Stacking out: the initials prompt appears only if the score qualifies, `Esc`
   skips without saving, and `Enter` persists it.
 - The score surviving a full restart — relaunch and check the leaderboard

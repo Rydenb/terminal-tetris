@@ -6,23 +6,57 @@ Single file, no build system, no dependencies beyond libncurses. Comes with a
 game menu, a persistent arcade-style high score table, and a game mode system
 that is ready for more variants.
 
+**The menu** — pick a mode with Left/Right, pick an action with Up/Down:
+
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                          T E T R I S                         │
-│                    ──────────────────────────                │
-│                                                              │
-│                      Mode    <  Marathon  >                  │
-│       Classic endless tetris. Clear lines, survive, score.   │
-│                                                              │
-│                    ──────────────────────────                │
-│                                                              │
-│                         > Play                               │
-│                           High Scores                        │
-│                           Quit                               │
-│                                                              │
-│         Up/Dn move    L/R mode    Enter select    Q quit     │
-└──────────────────────────────────────────────────────────────┘
+                    T E T R I S
+           ──────────────────────────────
+
+               Mode    <  Marathon  >
+
+ Classic endless tetris. Clear lines, survive, score.
+
+           ──────────────────────────────
+
+                > Play
+
+                  High Scores
+
+                  Quit
+
+  Up/Dn move    L/R mode    Enter select    Q quit
 ```
+
+**Marathon, mid-game** — the falling piece, the ghost showing where a hard drop
+lands, the next-piece preview, and the live counters:
+
+```
+┌────────────────────┐  TETRIS
+│. . . . . []. . . . │  ──────────────
+│. . . [][][]. . . . │
+│. . . . . . . . . . │  Score
+│. . . . . . . . . . │  164
+│. . . . . . . . . . │
+│. . . . . . . . . . │  Level
+│. . . . . . . . . . │  1
+│. . . . . . . . . . │
+│. . . . . . . . . . │  Lines
+│. . . . . . . . . . │  0
+│. . . . . . . . . . │
+│. . . . . . . . . . │  Next
+│. . . . . . . . . . │  . [][]
+│. . . . . . . . . . │  [][].
+│. . . . . []. . . . │
+│. . . [][][]. . . . │  L/R   move
+│[][][][][][]. . . . │  Up    rotate
+│[][]. . . []. . . . │  Dn    soft drop
+│[][]. . . [][][][]. │  Space hard drop
+│. [][]. . . . [][][]│  P     pause
+└────────────────────┘  Q     quit
+```
+
+That lone `[]` a few rows above the stack is the **ghost** — it marks where the
+piece lands if you hit Space. It renders dimmed in a real terminal.
 
 ## Requirements
 
@@ -79,7 +113,10 @@ mode, Enter confirms.
 | `P`             | Pause / resume                        |
 | `Q`             | Quit to the shell                     |
 
-### Game over
+### When the run ends
+
+A run ends when you top out, or when the mode's objective is met — the panel
+reads `GAME OVER`, `CLEARED` or `TIME UP` accordingly.
 
 | Key             | Action                                |
 | --------------- | ------------------------------------- |
@@ -100,13 +137,25 @@ If your score makes the top 10, you get an arcade-style prompt:
 
 ## Game modes
 
-| Mode     | Description                                                |
-| -------- | ---------------------------------------------------------- |
-| Marathon | Classic endless tetris. Level rises every 10 lines; gravity ramps from 800 ms per step down to a floor of 80 ms. |
+| Mode         | Objective                                                   | Ranked by |
+| ------------ | ----------------------------------------------------------- | --------- |
+| **Marathon** | Endless. Survive and score.                                 | Score     |
+| **Sprint**   | Clear 40 lines as fast as you can.                          | **Time**  |
+| **Ultra**    | Two minutes on the clock. Score as much as you can.         | Score     |
+| **Expert**   | Endless, but starts at level 10 — gravity opens at 170 ms per step instead of 800. | Score |
 
-More modes are planned. Adding one is a single row in the `MODES[]` table at
-the top of `tetris.c` — the rules engine, the menu and the score tables all read
-their behaviour from there. Each mode keeps its own high score table.
+Gravity ramps from 800 ms per step down to a floor of 80 ms, and the level rises
+every 10 lines, except in Expert which starts partway up that curve.
+
+Sprint ranks by **fastest time**, not highest score — its leaderboard shows a
+`TIME` column instead of `SCORE`. A time is only recorded if you actually clear
+all 40 lines; bailing out at 30 does not post an unbeatable short time. The HUD
+swaps the level readout for a clock in any mode with an objective, counting up
+in Sprint and down in Ultra.
+
+Adding a mode is a single row in the `MODES[]` table at the top of `tetris.c` —
+the rules engine, the menu, the HUD and the score tables all read their
+behaviour from there. Each mode keeps its own high score table.
 
 ## High scores
 
@@ -122,9 +171,14 @@ The file is plain text so you can read or back it up easily:
 
 ```
 # terminal-tetris high scores
-# <mode> <initials> <score> <level> <lines> <date>
-marathon SUO 12400 5 42 2026-09-09
+# <mode> <initials> <score> <level> <lines> <date> [<elapsed_ms>]
+marathon SUO 12400 5 42 2026-09-09 0
+sprint BOT 13782 5 40 2026-09-09 13061
 ```
+
+The trailing time field is optional and only meaningful for time-ranked modes —
+files written before Sprint existed load fine without it, and rows lacking a
+time simply sort last on a time-ranked board.
 
 Only the top 10 are kept per mode. The loader is deliberately forgiving: it
 ignores comments, blank lines, malformed rows, and rows for modes that no longer

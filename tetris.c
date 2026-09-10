@@ -77,14 +77,36 @@ typedef struct {
     int base_gravity_ms;        /* drop interval at the starting level     */
     int gravity_step_ms;        /* shaved off per level gained             */
     int min_gravity_ms;         /* floor, however high the level climbs    */
+    int goal_lines;             /* 0 = endless; otherwise clear this many  */
+    int time_limit_sec;         /* 0 = untimed                             */
+    int rank_by_time;           /* 1 = leaderboard sorts by fastest time   */
 } GameMode;
 
+/* A mode is just a row here. Anything that varies between modes belongs in
+ * this struct -- do not special-case a mode id anywhere else in the file. */
 static const GameMode MODES[] = {
     { "marathon", "Marathon",
       "Classic endless tetris. Clear lines, survive, score.",
-      1, 10, 800, 70, 80 },
+      1, 10, 800, 70, 80, 0, 0, 0 },
+
+    { "sprint", "Sprint",
+      "Clear 40 lines as fast as you can. Ranked by time.",
+      1, 10, 800, 70, 80, 40, 0, 1 },
+
+    { "ultra", "Ultra",
+      "Two minutes. Score as much as you can before time runs out.",
+      1, 10, 800, 70, 80, 0, 120, 0 },
+
+    { "expert", "Expert",
+      "Starts at level 10 and stays fast. For people who like pain.",
+      10, 10, 800, 70, 80, 0, 0, 0 },
 };
 #define NUM_MODES ((int)(sizeof MODES / sizeof MODES[0]))
+
+static int mode_is_timed(const GameMode *m)
+{
+    return m->goal_lines > 0 || m->time_limit_sec > 0;
+}
 
 typedef struct {
     const GameMode *mode;         /* ruleset in play                       */
@@ -95,7 +117,12 @@ typedef struct {
     int next;                     /* next piece index                      */
     int score, level, lines;
     long last_drop;               /* CLOCK_MONOTONIC ms of last gravity step */
-    int running, paused, over;
+    long elapsed_ms;              /* play time so far, excluding pauses    */
+    long last_frame;              /* for accumulating elapsed_ms           */
+    int running, paused;
+    int over;                     /* the run is finished, for any reason   */
+    int cleared;                  /* ...because the line goal was reached  */
+    int timed_out;                /* ...because the clock ran out          */
 } Game;
 
 /* Screen geometry, recomputed every frame so resizes are picked up. */
@@ -365,6 +392,7 @@ typedef struct {
     int  score;
     int  level;
     int  lines;
+    long elapsed_ms;           /* 0 when the mode does not time the run */
     char date[11];             /* YYYY-MM-DD */
 } ScoreEntry;
 
@@ -464,15 +492,30 @@ static void mkpath(const char *path)
     mkdir(tmp, 0700);
 }
 
-/* Keeps each mode's table sorted, descending, capped at MAX_SCORES. Reading
+/* Mode-aware ordering: fastest time wins on sprint-style modes, highest score
+ * everywhere else. An entry with no recorded time sorts last. */
+static int entry_better(const ScoreEntry *a, const ScoreEntry *b, int by_time)
+{
+    if (by_time) {
+        if (a->elapsed_ms <= 0)
+            return 0;
+        if (b->elapsed_ms <= 0)
+            return 1;
+        return a->elapsed_ms < b->elapsed_ms;
+    }
+    return a->score > b->score;
+}
+
+/* Keeps each mode's table sorted, best first, capped at MAX_SCORES. Reading
  * in any order gives the same result, so a hand-edited file is safe. */
 static void insert_score(int mi, const ScoreEntry *e)
 {
     ScoreTable *t = &tables[mi];
+    int by_time = MODES[mi].rank_by_time;
     int pos = t->n;
 
     for (int i = 0; i < t->n; i++) {
-        if (e->score > t->e[i].score) {
+        if (entry_better(e, &t->e[i], by_time)) {
             pos = i;
             break;
         }
@@ -488,16 +531,22 @@ static void insert_score(int mi, const ScoreEntry *e)
     t->e[pos] = *e;
 }
 
-static int qualifies(int mi, int score)
+static int qualifies(int mi, const ScoreEntry *e)
 {
     const ScoreTable *t = &tables[mi];
+    int by_time = MODES[mi].rank_by_time;
 
-    if (score <= 0)
+    if (by_time) {
+        if (e->elapsed_ms <= 0)
+            return 0;              /* never finished, so nothing to rank */
+    } else if (e->score <= 0) {
         return 0;
+    }
+
     if (t->n < MAX_SCORES)
         return 1;
 
-    return score > t->e[MAX_SCORES - 1].score;
+    return entry_better(e, &t->e[MAX_SCORES - 1], by_time);
 }
 
 static void load_scores(void)
@@ -515,13 +564,19 @@ static void load_scores(void)
     while (fgets(line, sizeof line, f)) {
         char mode[32], raw[64], date[64];
         ScoreEntry e;
-        int mi;
+        int mi, got;
 
         if (line[0] == '#' || line[0] == '\n')
             continue;
 
-        if (sscanf(line, "%31s %63s %d %d %d %63s",
-                   mode, raw, &e.score, &e.level, &e.lines, date) != 6)
+        memset(&e, 0, sizeof e);
+
+        /* The trailing time field is optional, so files written before timed
+         * modes existed still load -- they just read as "no time recorded". */
+        got = sscanf(line, "%31s %63s %d %d %d %63s %ld",
+                     mode, raw, &e.score, &e.level, &e.lines, date,
+                     &e.elapsed_ms);
+        if (got < 6)
             continue;              /* malformed line: skip it */
 
         if ((mi = find_mode(mode)) < 0)
@@ -550,13 +605,13 @@ static void save_scores(void)
         return;
 
     fprintf(f, "# terminal-tetris high scores\n");
-    fprintf(f, "# <mode> <initials> <score> <level> <lines> <date>\n");
+    fprintf(f, "# <mode> <initials> <score> <level> <lines> <date> [<elapsed_ms>]\n");
 
     for (int m = 0; m < NUM_MODES; m++)
         for (int i = 0; i < tables[m].n; i++) {
             const ScoreEntry *e = &tables[m].e[i];
-            fprintf(f, "%s %s %d %d %d %s\n", MODES[m].id, e->name,
-                    e->score, e->level, e->lines, e->date);
+            fprintf(f, "%s %s %d %d %d %s %ld\n", MODES[m].id, e->name,
+                    e->score, e->level, e->lines, e->date, e->elapsed_ms);
         }
 
     fclose(f);
@@ -700,10 +755,22 @@ static void panel_row(int *y, int x, const char *s)
     *y += 1;
 }
 
+/* m:ss.t, clamped at zero so a countdown never shows a negative clock.
+ * Tenths because sprint times are routinely decided by under a second. */
+static void fmt_time(char *buf, size_t len, long ms)
+{
+    if (ms < 0)
+        ms = 0;
+    snprintf(buf, len, "%ld:%02ld.%ld",
+             ms / 60000, (ms / 1000) % 60, (ms % 1000) / 100);
+}
+
 static void draw_panel(const Game *g, const Layout *L)
 {
+    const GameMode *m = g->mode;
     char buf[32];
     int x = L->px, y = L->py;
+    int cy;
 
     attron(COLOR_PAIR(PAIR_LABEL) | A_BOLD);
     mvaddstr(y, x, "TETRIS");
@@ -713,13 +780,28 @@ static void draw_panel(const Game *g, const Layout *L)
     mvhline(y + 1, x, ACS_HLINE, 14);
     attroff(COLOR_PAIR(PAIR_FRAME));
 
-    int cy = y + 3;
+    cy = y + 3;
 
     snprintf(buf, sizeof buf, "%d", g->score);
     panel_field(&cy, x, "Score", buf);
-    snprintf(buf, sizeof buf, "%d", g->level);
-    panel_field(&cy, x, "Level", buf);
-    snprintf(buf, sizeof buf, "%d", g->lines);
+
+    /* Timed and objective modes trade the level readout for a clock: level
+     * matters less when the run is bounded by time or a line target. */
+    if (mode_is_timed(m)) {
+        fmt_time(buf, sizeof buf,
+                 m->time_limit_sec > 0
+                     ? (long)m->time_limit_sec * 1000L - g->elapsed_ms
+                     : g->elapsed_ms);
+        panel_field(&cy, x, "Time", buf);
+    } else {
+        snprintf(buf, sizeof buf, "%d", g->level);
+        panel_field(&cy, x, "Level", buf);
+    }
+
+    if (m->goal_lines > 0)
+        snprintf(buf, sizeof buf, "%d/%d", g->lines, m->goal_lines);
+    else
+        snprintf(buf, sizeof buf, "%d", g->lines);
     panel_field(&cy, x, "Lines", buf);
 
     panel_label(cy, x, "Next");
@@ -810,8 +892,11 @@ static void draw(const Game *g)
         const char *lines[] = { "PAUSED", "press P" };
         board_panel(&L, lines, 2, PAIR_OVER);
     } else if (g->over) {
-        const char *lines[] = { "GAME OVER", "R retry  M menu", "Q quit" };
-        board_panel(&L, lines, 3, PAIR_OVER);
+        const char *title = g->cleared   ? "CLEARED"
+                          : g->timed_out ? "TIME UP"
+                                         : "GAME OVER";
+        const char *lines[] = { title, "R retry  M menu", "Q quit" };
+        board_panel(&L, lines, 3, g->cleared ? PAIR_S : PAIR_OVER);
     }
 
     refresh();
@@ -1028,7 +1113,7 @@ static Screen run_scores(int *mode)
     while (!g_quit) {
         const ScoreTable *t = &tables[m];
         char buf[160];
-        int ch, tx;
+        int ch, tx, by_time;
 
         if (screen_too_small()) {
             napms(100);
@@ -1046,8 +1131,12 @@ static Screen run_scores(int *mode)
         if (tx < 0)
             tx = 0;
 
+        /* Time-ranked modes swap the score column for a clock -- the score
+         * is not what a sprint is measuring. Column width is unchanged. */
+        by_time = MODES[m].rank_by_time;
+
         snprintf(buf, sizeof buf, "%2s   %-4s  %7s   %3s   %5s   %s",
-                 "#", "NAME", "SCORE", "LV", "LINES", "DATE");
+                 "#", "NAME", by_time ? "TIME" : "SCORE", "LV", "LINES", "DATE");
         put_str(5, tx, buf, PAIR_FRAME, A_BOLD);
 
         if (t->n == 0) {
@@ -1055,10 +1144,16 @@ static Screen run_scores(int *mode)
         } else {
             for (int i = 0; i < t->n; i++) {
                 const ScoreEntry *e = &t->e[i];
+                char metric[16];
+
+                if (by_time)
+                    fmt_time(metric, sizeof metric, e->elapsed_ms);
+                else
+                    snprintf(metric, sizeof metric, "%d", e->score);
 
                 snprintf(buf, sizeof buf,
-                         "%2d   %-4s  %7d   %3d   %5d   %s",
-                         i + 1, e->name, e->score, e->level, e->lines, e->date);
+                         "%2d   %-4s  %7s   %3d   %5d   %s",
+                         i + 1, e->name, metric, e->level, e->lines, e->date);
                 put_str(7 + i, tx, buf,
                         i == 0 ? PAIR_LABEL : PAIR_TEXT,
                         i == 0 ? A_BOLD : A_NORMAL);
@@ -1104,16 +1199,33 @@ static Screen run_game_over(const Game *g)
     return SCR_QUIT;
 }
 
+/* A mode can end without topping out: clear the line goal, or run out of
+ * clock. Both are checked once per unpaused frame. */
+static void check_objective(Game *g)
+{
+    const GameMode *m = g->mode;
+
+    if (m->goal_lines > 0 && g->lines >= m->goal_lines) {
+        g->over    = 1;
+        g->cleared = 1;
+    } else if (m->time_limit_sec > 0 &&
+               g->elapsed_ms >= (long)m->time_limit_sec * 1000L) {
+        g->over      = 1;
+        g->timed_out = 1;
+    }
+}
+
 static Screen run_game(int mi)
 {
     const GameMode *m = &MODES[mi];
     Game g;
 
     memset(&g, 0, sizeof g);
-    g.mode      = m;
-    g.level     = m->start_level;
-    g.running   = 1;
-    g.last_drop = now_ms();
+    g.mode       = m;
+    g.level      = m->start_level;
+    g.running    = 1;
+    g.last_drop  = now_ms();
+    g.last_frame = g.last_drop;
 
     bag_pos = NUM_PIECES;           /* fresh bag every game */
     g.next  = next_piece();
@@ -1121,6 +1233,7 @@ static Screen run_game(int mi)
 
     while (g.running && !g_quit && !g.over) {
         int ch;
+        long now;
 
         /* Drain every pending keypress before ticking the clock. */
         while ((ch = getch()) != ERR)
@@ -1134,14 +1247,19 @@ static Screen run_game(int mi)
             continue;
         }
 
-        if (!g.over && !g.paused) {
-            long now = now_ms();
+        now = now_ms();
+
+        if (!g.paused) {
+            g.elapsed_ms += now - g.last_frame;
+
             if (now - g.last_drop >= drop_interval_ms(&g)) {
                 g.last_drop = now;
                 if (!try_move(&g, 0, 1))
                     lock_piece(&g);
             }
+            check_objective(&g);
         }
+        g.last_frame = now;
 
         draw(&g);
         napms(16);                  /* ~60 fps */
@@ -1151,20 +1269,27 @@ static Screen run_game(int mi)
         return SCR_QUIT;            /* the player quit mid-game */
 
     /* Offer a place on the table if this run earned one. */
-    if (qualifies(mi, g.score)) {
+    {
         ScoreEntry e;
-        char name[INITIALS + 1];
 
+        memset(&e, 0, sizeof e);
         snprintf(e.name, sizeof e.name, "---");
         e.score = g.score;
         e.level = g.level;
         e.lines = g.lines;
+        /* Only record a time if the run actually finished: an abandoned
+         * sprint should not post an unbeatable short time. */
+        e.elapsed_ms = g.cleared ? g.elapsed_ms : 0;
         today(e.date, sizeof e.date);
 
-        if (run_initials_entry(&e, name)) {
-            memcpy(e.name, name, sizeof e.name);
-            insert_score(mi, &e);
-            save_scores();
+        if (qualifies(mi, &e)) {
+            char name[INITIALS + 1];
+
+            if (run_initials_entry(&e, name)) {
+                memcpy(e.name, name, sizeof e.name);
+                insert_score(mi, &e);
+                save_scores();
+            }
         }
     }
 
