@@ -120,6 +120,7 @@ typedef struct {
     long elapsed_ms;              /* play time so far, excluding pauses    */
     long last_frame;              /* for accumulating elapsed_ms           */
     int running, paused;
+    int to_menu;                  /* asked for the menu, rather than a quit */
     int over;                     /* the run is finished, for any reason   */
     int cleared;                  /* ...because the line goal was reached  */
     int timed_out;                /* ...because the clock ran out          */
@@ -352,6 +353,10 @@ static void handle_input(Game *g, int ch, long now)
 
     switch (ch) {
     case 'q': case 'Q':
+        g->running = 0;
+        break;
+    case 'm': case 'M':
+        g->to_menu = 1;
         g->running = 0;
         break;
     case 'p': case 'P':
@@ -806,13 +811,15 @@ static void draw_panel(const Game *g, const Layout *L)
 
     panel_label(cy, x, "Next");
     draw_preview(g, x, cy + 1);
-    cy += 4;
+    cy += 3;                    /* one row tighter, so the list still ends
+                                 * level with the board's bottom border */
 
     panel_row(&cy, x, "L/R   move");
     panel_row(&cy, x, "Up    rotate");
     panel_row(&cy, x, "Dn    soft drop");
     panel_row(&cy, x, "Space hard drop");
     panel_row(&cy, x, "P     pause");
+    panel_row(&cy, x, "M     menu");
     panel_row(&cy, x, "Q     quit");
 }
 
@@ -1265,8 +1272,9 @@ static Screen run_game(int mi)
         napms(16);                  /* ~60 fps */
     }
 
+    /* Leaving mid-run abandons it: no score is recorded either way. */
     if (!g.over)
-        return SCR_QUIT;            /* the player quit mid-game */
+        return g.to_menu ? SCR_MENU : SCR_QUIT;
 
     /* Offer a place on the table if this run earned one. */
     {

@@ -111,6 +111,7 @@ mode, Enter confirms.
 | `Down`          | Soft drop (+1 point per cell)         |
 | `Space`         | Hard drop (+2 points per cell)        |
 | `P`             | Pause / resume                        |
+| `M`             | Back to the main menu (abandons the run) |
 | `Q`             | Quit to the shell                     |
 
 ### When the run ends
