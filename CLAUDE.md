@@ -6,7 +6,10 @@ Project memory for Claude Code. Read this before changing anything here.
 
 A complete Tetris game for the Ubuntu terminal, written in C against ncurses.
 Deliberately a **single translation unit** — no Makefile, no headers, no
-subdirectories. Everything lives in `tetris.c`.
+subdirectories. Everything lives in `tetris.c`, currently ~1100 lines.
+
+Features: a game menu, a mode system, and a persistent per-mode arcade high
+score table.
 
 ## Build
 
@@ -23,14 +26,34 @@ sudo apt update && sudo apt install -y build-essential libncurses-dev
 There is no Makefile on purpose. If you find yourself wanting one, the change
 is out of scope for this project.
 
+**Note on linking:** the plain `-lncurses` form is correct once
+`libncurses-dev` is installed. If you are building against headers extracted
+into a userspace prefix (see *Building without root* below), you must also pass
+`-ltinfo` explicitly, because `cbreak` and friends live in libtinfo.
+
+### Building without root
+
+`sudo` in this environment needs an interactive password. To build anyway:
+
+```sh
+apt-get download libncurses-dev && dpkg -x libncurses-dev_*.deb root/
+gcc tetris.c -o tetris -Iroot/usr/include -L<dir-with-libncurses.so> \
+    -lncurses -ltinfo
+```
+
+The runtime `libncurses.so.6` is usually already present; only the headers and
+the `.so` dev symlink are missing.
+
 ## Run
 
 ```sh
 ./tetris
 ```
 
-Needs a terminal of at least **38 columns x 22 rows**. The game prints a
-"Terminal too small" notice instead of drawing garbage if it is smaller.
+Needs a terminal of at least **50 columns x 22 rows**. The menu footer and the
+leaderboard columns are what set the 50; the board alone would fit in 38. Any
+screen that is too small shows a "Terminal too small" notice rather than drawing
+garbage.
 
 ## Code style rules
 
@@ -39,26 +62,81 @@ Needs a terminal of at least **38 columns x 22 rows**. The game prints a
 - C99 declarations. Where a variable is only used in a narrow scope, declare it
   there rather than at the top of the function.
 - **Explicit ncurses cleanup on every exit path.** `endwin()` must run whether
-  the player quits, dies, or hits Ctrl-C. This is enforced two ways:
-  `atexit(cleanup)` as the backstop, and a `SIGINT`/`SIGTERM` handler that sets
-  `g_quit` so the main loop unwinds normally.
-- Section banners (`/* ---- name */`) separate setup, rules, drawing, and main.
-- Keep comments about *why*, not *what*. The rotation derivation and the
-  line-clear compaction both deserve their existing notes; trivia does not.
+  the player quits, dies, or hits Ctrl-C. Enforced two ways: `atexit(cleanup)`
+  as the backstop, and a `SIGINT`/`SIGTERM` handler that sets `g_quit` so the
+  main loop unwinds normally.
+- Section banners (`/* ---- name */`) separate setup, rules, scores, drawing,
+  screens, and main.
+- Keep comments about *why*, not *what*. The rotation derivation, the
+  line-clear compaction, the shared-edge table alignment and the initials
+  sanitiser all deserve their existing notes; trivia does not.
 
-## Architecture notes
+## Architecture
+
+### Game modes
+
+`MODES[]` near the top is the single source of truth for mode behaviour — name,
+blurb, starting level, lines-per-level and the gravity curve. There are **no
+hard-coded 800/70/80/10 constants anywhere in the rules engine**; it reads them
+off `Game::mode`. Adding a mode is one row in that table plus a `blurb`. The id
+string is the stable key used in the score file, so **never change an existing
+id** — doing so orphans everyone's saved scores.
+
+### Screen state machine
+
+`main()` does essentially nothing: it initialises ncurses, loads scores, then
+loops on a `Screen` value (`SCR_MENU`, `SCR_GAME`, `SCR_SCORES`, `SCR_QUIT`),
+dispatching to `run_menu()`, `run_game()` or `run_scores()`. Each of those
+returns the screen to go to next, so navigation is data, not call nesting.
+
+`run_game()` owns one game: it plays the loop to completion, then offers the
+initials prompt if the score qualifies, then hands off to `run_game_over()`.
+Retry is just `run_game()` returning `SCR_GAME`, which re-enters it.
+
+Every screen loop follows the same shape: check `screen_too_small()`, `erase()`,
+draw, `refresh()`, then drain all pending keypresses with a non-blocking
+`getch()` before `napms(16)`. Keep that pattern — it is what makes the ~60 fps
+loop and independent gravity work.
+
+### Rendering
 
 - `SHAPE_SRC` holds only the **spawn orientation** of each tetromino. The other
-  three rotations are generated at start-up in `init_shapes()` by rotating the
-  4x4 box a quarter turn. Never hand-write rotation tables.
+  three rotations are generated at start-up in `init_shapes()`. Never hand-write
+  rotation tables.
 - The board stores `0` for empty and `piece + 1` for a settled cell, so the
-  stored value *is* the ncurses colour-pair index. That coupling is intentional.
-- The main loop is non-blocking: `nodelay(stdscr, TRUE)`, drain all pending
-  keypresses, then compare `CLOCK_MONOTONIC` against `last_drop` to decide
-  whether gravity fires. Gravity is therefore independent of the redraw rate and
-  of how long the player holds a key.
-- `compute_layout()` runs every frame, so terminal resizes are picked up for
-  free — no `SIGWINCH` handling needed.
+  stored value *is* the ncurses colour-pair index. Intentional.
+- `compute_layout()` runs every frame, so resizes are picked up for free.
+- `draw_panel_box()` / `panel_center()` / `board_panel()` are the reusable
+  panel primitives. `board_panel()` sizes itself to its longest line and is
+  capped at the board width.
+- **Never centre table rows independently.** The leaderboard uses one shared
+  left edge (`TABLE_W`) via `put_str()`; centring each line on its own shears
+  the columns apart, because rows differ in length. This bug has been fixed once
+  already.
+- `center_text()` clamps negative `x` to 0. That is deliberate — clipping beats
+  a negative `mvaddstr` writing off-screen.
+
+### High scores
+
+Plain text at `$XDG_DATA_HOME/terminal-tetris/scores`, falling back to
+`~/.local/share/terminal-tetris/scores`. Directory is created `0700`; failures
+to create or write are swallowed on purpose, because losing a score table must
+never stop the game from being playable.
+
+Line format, one entry per line, comments start with `#`:
+
+```
+<mode-id> <initials> <score> <level> <lines> <YYYY-MM-DD>
+```
+
+`insert_score()` maintains a sorted top-`MAX_SCORES`, so reading the file **in
+any order** gives the same result. That is what makes a hand-edited file safe.
+
+Parsing is defensive and must stay that way. It skips malformed rows, rows with
+too few fields, rows for unknown mode ids, and anything starting with `#`.
+`clean_initials()` forces names to three characters from `[A-Z0-9]` (everything
+else becomes `-`), which is what stops a hand-edited file from injecting
+terminal escape sequences into the UI. Do not relax this.
 
 ## Testing
 
@@ -68,16 +146,36 @@ Compiles clean with `-Wall -Wextra`. Please keep it that way:
 gcc -Wall -Wextra tetris.c -o tetris -lncurses
 ```
 
-There is no automated test suite; the game is verified by playing it. If you
-touch collision, rotation, or line clearing, check these by hand:
+There is no automated test suite. The game is a full-screen TUI, so it cannot be
+run in a plain shell — it needs a pty. The pattern that works:
 
-- Rotating a piece flush against each of the four walls (wall kicks).
-- Rotating the I piece and the O piece in a tight well.
-- Clearing a single line, and a tetris (four rows) at once.
-- Filling the stack to the top and confirming the game-over overlay appears and
-  that the terminal is restored cleanly on `Q`.
+- Allocate a pty (`pty.fork()` in Python), set the window size with
+  `TIOCSWINSZ`, and drive it with real key sequences from `curses.tigetstr`
+  (`kcub1`, `kcuf1`, `kcuu1`, `kcud1`, `kent`).
+- Decode the output with `pyte` (installed into a **venv**, never system
+  Python) to read back the screen.
+- Answer `\x1b[6n` cursor-position queries, or ncurses blocks waiting for a
+  reply.
+- **Use a terminfo without `rep` (e.g. `TERM=linux` or `vt100`) when checking
+  layout.** ncurses uses REP to compress runs of identical characters such as
+  box-drawing borders, and pyte does not implement REP — so `TERM=xterm-256color`
+  makes pyte render collapsed borders and misreport column positions. This
+  produces convincing but entirely fake "bugs".
+- Point `XDG_DATA_HOME` at a temp directory so tests never touch real scores.
+
+Check by hand after touching rules or screens:
+
+- Rotating flush against each of the four walls (wall kicks).
+- Clearing a single line, and a tetris at once.
+- Stacking out: the initials prompt appears only if the score qualifies, `Esc`
+  skips without saving, and `Enter` persists it.
+- The score surviving a full restart — relaunch and check the leaderboard
+  reads from disk, not just from memory.
+- A deliberately corrupted score file (junk rows, unknown mode, over-long
+  initials, raw escape bytes) loading without crashing.
 
 ## Git
 
 Default branch is `main`. Do not commit the `tetris` binary — it is in
-`.gitignore` and always will be.
+`.gitignore` and always will be. The score file lives outside the repo, so it is
+never a commit risk.

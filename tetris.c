@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -31,7 +32,9 @@
 #define NUM_PIECES  7          /* I J L O S T Z                        */
 #define NUM_ROTS    4          /* four quarter-turns per piece         */
 
-#define MIN_COLS   38          /* board frame (22) + side panel (16)   */
+#define MIN_COLS   50          /* board (22) + panel (16) + margins, and
+                                * wide enough for the menu footer and the
+                                * leaderboard columns without clipping     */
 #define MIN_LINES  22
 
 /* Colour pairs. 1..7 are the tetrominoes, in piece-index order. */
@@ -63,7 +66,28 @@ static const int KICKS[][2] = {
 };
 #define NUM_KICKS ((int)(sizeof KICKS / sizeof KICKS[0]))
 
+/* A game mode. Adding a new one is a new row in MODES[] below -- the rules
+ * engine reads its numbers from here rather than hard-coding them. */
 typedef struct {
+    const char *id;             /* stable key used in the score file      */
+    const char *name;           /* display name                           */
+    const char *blurb;          /* one-line description for the menu      */
+    int start_level;
+    int lines_per_level;
+    int base_gravity_ms;        /* drop interval at the starting level     */
+    int gravity_step_ms;        /* shaved off per level gained             */
+    int min_gravity_ms;         /* floor, however high the level climbs    */
+} GameMode;
+
+static const GameMode MODES[] = {
+    { "marathon", "Marathon",
+      "Classic endless tetris. Clear lines, survive, score.",
+      1, 10, 800, 70, 80 },
+};
+#define NUM_MODES ((int)(sizeof MODES / sizeof MODES[0]))
+
+typedef struct {
+    const GameMode *mode;         /* ruleset in play                       */
     int board[BOARD_H][BOARD_W];  /* 0 = empty, else a colour-pair index   */
     int piece;                    /* active piece index                    */
     int rot;                      /* active rotation, 0..3                 */
@@ -71,7 +95,7 @@ typedef struct {
     int next;                     /* next piece index                      */
     int score, level, lines;
     long last_drop;               /* CLOCK_MONOTONIC ms of last gravity step */
-    int running, paused, over, restart;
+    int running, paused, over;
 } Game;
 
 /* Screen geometry, recomputed every frame so resizes are picked up. */
@@ -252,7 +276,8 @@ static void clear_lines(Game *g)
     if (cleared > 0) {
         g->score += POINTS[cleared] * g->level;
         g->lines += cleared;
-        g->level  = 1 + g->lines / 10;
+        g->level  = g->mode->start_level +
+                    g->lines / g->mode->lines_per_level;
     }
 }
 
@@ -284,27 +309,19 @@ static void hard_drop(Game *g)
     lock_piece(g);
 }
 
-/* Speed ramps up with level, from a lazy 800 ms down to a floor of 80 ms. */
+/* Gravity ramps up with level; the curve itself comes from the game mode. */
 static int drop_interval_ms(const Game *g)
 {
-    int ms = 800 - (g->level - 1) * 70;
-    return ms < 80 ? 80 : ms;
+    const GameMode *m = g->mode;
+    int ms = m->base_gravity_ms - (g->level - 1) * m->gravity_step_ms;
+
+    return ms < m->min_gravity_ms ? m->min_gravity_ms : ms;
 }
 
 static void handle_input(Game *g, int ch, long now)
 {
     if (ch == ERR)
         return;
-
-    if (g->over) {
-        if (ch == 'r' || ch == 'R') {
-            g->restart = 1;
-            g->running = 0;
-        } else if (ch == 'q' || ch == 'Q') {
-            g->running = 0;
-        }
-        return;
-    }
 
     switch (ch) {
     case 'q': case 'Q':
@@ -335,6 +352,214 @@ static void handle_input(Game *g, int ch, long now)
     default:
         break;
     }
+}
+
+/* ---------------------------------------------------------------- scores */
+
+#define MAX_SCORES 10
+#define INITIALS    3          /* arcade-style, three characters */
+#define TABLE_W    46          /* leaderboard column block, one shared edge */
+
+typedef struct {
+    char name[INITIALS + 1];
+    int  score;
+    int  level;
+    int  lines;
+    char date[11];             /* YYYY-MM-DD */
+} ScoreEntry;
+
+typedef struct {
+    ScoreEntry e[MAX_SCORES];
+    int n;
+} ScoreTable;
+
+static ScoreTable tables[NUM_MODES];
+
+static int find_mode(const char *id)
+{
+    for (int i = 0; i < NUM_MODES; i++)
+        if (strcmp(MODES[i].id, id) == 0)
+            return i;
+    return -1;
+}
+
+/* Force anything read off disk into three safe display characters, so a
+ * hand-edited score file can never inject escape sequences into the UI. */
+static void clean_initials(char *dst, const char *src)
+{
+    int n = 0;
+
+    for (; src[n] && n < INITIALS; n++) {
+        char c = src[n];
+        if (c >= 'a' && c <= 'z')
+            c = (char)(c - 32);
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')))
+            c = '-';
+        dst[n] = c;
+    }
+    while (n < INITIALS)
+        dst[n++] = '-';
+    dst[INITIALS] = '\0';
+}
+
+static void today(char *buf, size_t len)
+{
+    time_t t = time(NULL);
+    struct tm *lt = localtime(&t);
+
+    if (lt)
+        strftime(buf, len, "%Y-%m-%d", lt);
+    else
+        snprintf(buf, len, "0000-00-00");
+}
+
+/* $XDG_DATA_HOME/terminal-tetris, else ~/.local/share/terminal-tetris. */
+static int scores_dir(char *buf, size_t len)
+{
+    const char *base = getenv("XDG_DATA_HOME");
+    const char *home;
+    int n;
+
+    if (base && base[0] == '/')
+        n = snprintf(buf, len, "%s/terminal-tetris", base);
+    else if ((home = getenv("HOME")) != NULL && home[0] == '/')
+        n = snprintf(buf, len, "%s/.local/share/terminal-tetris", home);
+    else
+        return -1;
+
+    return (n > 0 && (size_t)n < len) ? 0 : -1;
+}
+
+static int scores_path(char *buf, size_t len)
+{
+    char dir[512];
+    int n;
+
+    if (scores_dir(dir, sizeof dir) != 0)
+        return -1;
+
+    n = snprintf(buf, len, "%s/scores", dir);
+    return (n > 0 && (size_t)n < len) ? 0 : -1;
+}
+
+/* mkdir -p, one component at a time. Failures are ignored on purpose: if we
+ * cannot write scores the game should still be playable. */
+static void mkpath(const char *path)
+{
+    char tmp[512];
+    size_t len = strlen(path);
+
+    if (len == 0 || len >= sizeof tmp)
+        return;
+
+    memcpy(tmp, path, len + 1);
+
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p != '/')
+            continue;
+        *p = '\0';
+        mkdir(tmp, 0700);
+        *p = '/';
+    }
+    mkdir(tmp, 0700);
+}
+
+/* Keeps each mode's table sorted, descending, capped at MAX_SCORES. Reading
+ * in any order gives the same result, so a hand-edited file is safe. */
+static void insert_score(int mi, const ScoreEntry *e)
+{
+    ScoreTable *t = &tables[mi];
+    int pos = t->n;
+
+    for (int i = 0; i < t->n; i++) {
+        if (e->score > t->e[i].score) {
+            pos = i;
+            break;
+        }
+    }
+    if (pos >= MAX_SCORES)
+        return;                    /* didn't make the cut */
+
+    if (t->n < MAX_SCORES)
+        t->n++;
+
+    for (int i = t->n - 1; i > pos; i--)
+        t->e[i] = t->e[i - 1];
+    t->e[pos] = *e;
+}
+
+static int qualifies(int mi, int score)
+{
+    const ScoreTable *t = &tables[mi];
+
+    if (score <= 0)
+        return 0;
+    if (t->n < MAX_SCORES)
+        return 1;
+
+    return score > t->e[MAX_SCORES - 1].score;
+}
+
+static void load_scores(void)
+{
+    char path[512], line[256];
+    FILE *f;
+
+    memset(tables, 0, sizeof tables);
+
+    if (scores_path(path, sizeof path) != 0)
+        return;
+    if ((f = fopen(path, "r")) == NULL)
+        return;                    /* first run: no file yet, all good */
+
+    while (fgets(line, sizeof line, f)) {
+        char mode[32], raw[64], date[64];
+        ScoreEntry e;
+        int mi;
+
+        if (line[0] == '#' || line[0] == '\n')
+            continue;
+
+        if (sscanf(line, "%31s %63s %d %d %d %63s",
+                   mode, raw, &e.score, &e.level, &e.lines, date) != 6)
+            continue;              /* malformed line: skip it */
+
+        if ((mi = find_mode(mode)) < 0)
+            continue;              /* score for a mode that no longer exists */
+
+        clean_initials(e.name, raw);
+        snprintf(e.date, sizeof e.date, "%.10s", date);
+        insert_score(mi, &e);
+    }
+
+    fclose(f);
+}
+
+static void save_scores(void)
+{
+    char dir[512], path[512];
+    FILE *f;
+
+    if (scores_dir(dir, sizeof dir) != 0)
+        return;
+    mkpath(dir);
+
+    if (scores_path(path, sizeof path) != 0)
+        return;
+    if ((f = fopen(path, "w")) == NULL)
+        return;
+
+    fprintf(f, "# terminal-tetris high scores\n");
+    fprintf(f, "# <mode> <initials> <score> <level> <lines> <date>\n");
+
+    for (int m = 0; m < NUM_MODES; m++)
+        for (int i = 0; i < tables[m].n; i++) {
+            const ScoreEntry *e = &tables[m].e[i];
+            fprintf(f, "%s %s %d %d %d %s\n", MODES[m].id, e->name,
+                    e->score, e->level, e->lines, e->date);
+        }
+
+    fclose(f);
 }
 
 /* ---------------------------------------------------------------- drawing */
@@ -509,25 +734,54 @@ static void draw_panel(const Game *g, const Layout *L)
     panel_row(&cy, x, "Q     quit");
 }
 
-static void draw_overlay(const Layout *L, const char *title, const char *sub)
+/* A filled, bordered box anywhere on the screen. */
+static void draw_panel_box(int x, int y, int w, int h, int pair)
 {
-    int w = 18, h = 5;
-    int x = L->ix + (BOARD_W * 2 - w) / 2;
-    int y = L->iy + (BOARD_H - h) / 2;
-
     for (int r = 0; r < h; r++)
         for (int c = 0; c < w; c++) {
-            attron(COLOR_PAIR(PAIR_OVER));
+            attron(COLOR_PAIR(pair));
             mvaddch(y + r, x + c, ' ');
-            attroff(COLOR_PAIR(PAIR_OVER));
+            attroff(COLOR_PAIR(pair));
         }
 
-    draw_frame(x, y, w, h, PAIR_OVER);
+    draw_frame(x, y, w, h, pair);
+}
 
-    attron(COLOR_PAIR(PAIR_OVER) | A_BOLD);
-    mvaddstr(y + 2, x + (w - (int)strlen(title)) / 2, title);
-    mvaddstr(y + 3, x + (w - (int)strlen(sub)) / 2, sub);
-    attroff(COLOR_PAIR(PAIR_OVER) | A_BOLD);
+static void panel_center(int x, int y, int w, const char *s, int pair, int attrs)
+{
+    int tx = x + (w - (int)strlen(s)) / 2;
+
+    if (tx < x + 1)
+        tx = x + 1;
+
+    attron(COLOR_PAIR(pair) | attrs);
+    mvaddstr(y, tx, s);
+    attroff(COLOR_PAIR(pair) | attrs);
+}
+
+/* A message box centred over the board, sized to its longest line but never
+ * wider than the board itself. First line renders bold. */
+static void board_panel(const Layout *L, const char *const *lines, int n, int pair)
+{
+    int w = 18, h = n + 2;
+    int x, y;
+
+    for (int i = 0; i < n; i++) {
+        int need = (int)strlen(lines[i]) + 4;
+        if (need > w)
+            w = need;
+    }
+    if (w > BOARD_W * 2)
+        w = BOARD_W * 2;
+
+    x = L->ix + (BOARD_W * 2 - w) / 2;
+    y = L->iy + (BOARD_H - h) / 2;
+
+    draw_panel_box(x, y, w, h, pair);
+
+    for (int i = 0; i < n; i++)
+        panel_center(x, y + 1 + i, w, lines[i], pair,
+                     i == 0 ? A_BOLD : A_NORMAL);
 }
 
 static void draw(const Game *g)
@@ -552,20 +806,377 @@ static void draw(const Game *g)
     draw_board(g, &L);
     draw_panel(g, &L);
 
-    if (g->paused)
-        draw_overlay(&L, "PAUSED", "press P");
-    else if (g->over)
-        draw_overlay(&L, "GAME OVER", "Q quit  R retry");
+    if (g->paused) {
+        const char *lines[] = { "PAUSED", "press P" };
+        board_panel(&L, lines, 2, PAIR_OVER);
+    } else if (g->over) {
+        const char *lines[] = { "GAME OVER", "R retry  M menu", "Q quit" };
+        board_panel(&L, lines, 3, PAIR_OVER);
+    }
 
     refresh();
+}
+
+/* --------------------------------------------------------------- screens */
+
+typedef enum { SCR_MENU, SCR_GAME, SCR_SCORES, SCR_QUIT } Screen;
+
+static void put_str(int y, int x, const char *s, int pair, int attrs)
+{
+    attron(COLOR_PAIR(pair) | attrs);
+    mvaddstr(y, x, s);
+    attroff(COLOR_PAIR(pair) | attrs);
+}
+
+static void center_text(int y, const char *s, int pair, int attrs)
+{
+    int x = (COLS - (int)strlen(s)) / 2;
+
+    if (x < 0)
+        x = 0;
+    put_str(y, x, s, pair, attrs);
+}
+
+static void center_rule(int y, int w, int pair)
+{
+    int x = (COLS - w) / 2;
+
+    if (x < 0)
+        x = 0;
+
+    attron(COLOR_PAIR(pair));
+    mvhline(y, x, ACS_HLINE, w);
+    attroff(COLOR_PAIR(pair));
+}
+
+/* Every screen shares this guard so a shrunken window never draws garbage. */
+static int screen_too_small(void)
+{
+    if (COLS >= MIN_COLS && LINES >= MIN_LINES)
+        return 0;
+
+    erase();
+    center_text(LINES / 2, "Terminal too small", PAIR_OVER, A_BOLD);
+
+    char buf[80];
+    snprintf(buf, sizeof buf, "Need %dx%d, have %dx%d",
+             MIN_COLS, MIN_LINES, COLS, LINES);
+    center_text(LINES / 2 + 1, buf, PAIR_OVER, A_NORMAL);
+    refresh();
+    return 1;
+}
+
+/* Arcade initials entry. Returns 1 if the player confirmed, 0 if they skipped. */
+static int run_initials_entry(const ScoreEntry *e, char *out)
+{
+    char buf[INITIALS + 1];
+    int pos = 0, saved = 0;
+
+    memset(buf, '-', INITIALS);
+    buf[INITIALS] = '\0';
+
+    while (!g_quit && !saved) {
+        char line[128];
+        int ch, w = 40, x, y, done = 0;
+
+        if (screen_too_small()) {
+            napms(100);
+            continue;
+        }
+
+        x = (COLS - w) / 2;
+        y = (LINES - 12) / 2;
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+
+        erase();
+        draw_panel_box(x, y, w, 12, PAIR_OVER);
+        panel_center(x, y + 1, w, "NEW HIGH SCORE", PAIR_OVER, A_BOLD);
+
+        snprintf(line, sizeof line, "Score   %d", e->score);
+        panel_center(x, y + 3, w, line, PAIR_OVER, A_NORMAL);
+        snprintf(line, sizeof line, "Level   %d", e->level);
+        panel_center(x, y + 4, w, line, PAIR_OVER, A_NORMAL);
+        snprintf(line, sizeof line, "Lines   %d", e->lines);
+        panel_center(x, y + 5, w, line, PAIR_OVER, A_NORMAL);
+
+        panel_center(x, y + 7, w, "Enter your initials", PAIR_OVER, A_NORMAL);
+
+        int sx = x + (w - (INITIALS * 4 - 1)) / 2;
+        for (int i = 0; i < INITIALS; i++) {
+            chtype a = (i == pos) ? A_REVERSE : A_NORMAL;
+            attron(COLOR_PAIR(PAIR_OVER) | A_BOLD | a);
+            mvaddch(y + 9, sx + i * 4, (chtype)buf[i]);
+            attroff(COLOR_PAIR(PAIR_OVER) | A_BOLD | a);
+        }
+
+        panel_center(x, y + 10, w, "A-Z 0-9 type  Enter save  Esc skip",
+                     PAIR_OVER, A_NORMAL);
+        refresh();
+
+        while ((ch = getch()) != ERR) {
+            if (ch == 27) {                       /* Esc -- skip */
+                done = 1;
+                break;
+            }
+            if (ch == '\n' || ch == '\r' || ch == KEY_ENTER) {
+                saved = 1;
+                break;
+            }
+            if (ch == KEY_BACKSPACE || ch == 127 || ch == 8) {
+                if (pos > 0)
+                    buf[--pos] = '-';
+                continue;
+            }
+            if (ch >= 'a' && ch <= 'z')
+                ch -= 32;
+            if ((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) {
+                buf[pos] = (char)ch;
+                if (pos < INITIALS - 1)
+                    pos++;
+            }
+        }
+
+        if (done)
+            break;
+        napms(16);
+    }
+
+    if (saved)
+        memcpy(out, buf, INITIALS + 1);
+
+    return saved;
+}
+
+/* Main menu. Returns the screen to go to next. */
+static Screen run_menu(int *mode)
+{
+    enum { ACT_PLAY, ACT_SCORES, ACT_QUIT, NUM_ACTIONS };
+    static const char *const ACTIONS[NUM_ACTIONS] = { "Play", "High Scores", "Quit" };
+    int sel = ACT_PLAY;
+
+    while (!g_quit) {
+        char buf[160];
+        int ch, top, bx;
+
+        if (screen_too_small()) {
+            napms(100);
+            continue;
+        }
+
+        top = LINES / 2 - 7;
+        if (top < 0)
+            top = 0;
+
+        erase();
+        center_text(top, "T E T R I S", PAIR_LABEL, A_BOLD);
+        center_rule(top + 1, 30, PAIR_FRAME);
+
+        snprintf(buf, sizeof buf, "Mode    <  %s  >", MODES[*mode].name);
+        center_text(top + 3, buf, PAIR_TEXT, A_BOLD);
+        snprintf(buf, sizeof buf, "%.64s", MODES[*mode].blurb);
+        center_text(top + 4, buf, PAIR_TEXT, A_NORMAL);
+
+        center_rule(top + 6, 30, PAIR_FRAME);
+
+        bx = (COLS - 24) / 2;
+        if (bx < 0)
+            bx = 0;
+
+        for (int i = 0; i < NUM_ACTIONS; i++) {
+            snprintf(buf, sizeof buf, "  %s %s", i == sel ? ">" : " ", ACTIONS[i]);
+            put_str(top + 8 + i * 2, bx, buf,
+                    i == sel ? PAIR_LABEL : PAIR_TEXT,
+                    i == sel ? A_BOLD : A_NORMAL);
+        }
+
+        center_text(LINES - 2, "Up/Dn move    L/R mode    Enter select    Q quit",
+                    PAIR_FRAME, A_NORMAL);
+        refresh();
+
+        while ((ch = getch()) != ERR) {
+            if (ch == 'q' || ch == 'Q')
+                return SCR_QUIT;
+
+            if (ch == KEY_UP)
+                sel = (sel + NUM_ACTIONS - 1) % NUM_ACTIONS;
+            else if (ch == KEY_DOWN)
+                sel = (sel + 1) % NUM_ACTIONS;
+            else if (ch == KEY_LEFT)
+                *mode = (*mode + NUM_MODES - 1) % NUM_MODES;
+            else if (ch == KEY_RIGHT)
+                *mode = (*mode + 1) % NUM_MODES;
+            else if (ch == '\n' || ch == '\r' || ch == KEY_ENTER) {
+                if (sel == ACT_PLAY)
+                    return SCR_GAME;
+                else if (sel == ACT_SCORES)
+                    return SCR_SCORES;
+                else
+                    return SCR_QUIT;
+            }
+        }
+        napms(16);
+    }
+    return SCR_QUIT;
+}
+
+/* The top-10 table for one mode, switchable with left/right. */
+static Screen run_scores(int *mode)
+{
+    int m = *mode;
+
+    while (!g_quit) {
+        const ScoreTable *t = &tables[m];
+        char buf[160];
+        int ch, tx;
+
+        if (screen_too_small()) {
+            napms(100);
+            continue;
+        }
+
+        erase();
+        snprintf(buf, sizeof buf, "HIGH SCORES  --  %s", MODES[m].name);
+        center_text(2, buf, PAIR_LABEL, A_BOLD);
+        center_rule(3, 46, PAIR_FRAME);
+
+        /* One shared left edge for the header and every row: centring each
+         * line on its own would shear the columns apart. */
+        tx = (COLS - TABLE_W) / 2;
+        if (tx < 0)
+            tx = 0;
+
+        snprintf(buf, sizeof buf, "%2s   %-4s  %7s   %3s   %5s   %s",
+                 "#", "NAME", "SCORE", "LV", "LINES", "DATE");
+        put_str(5, tx, buf, PAIR_FRAME, A_BOLD);
+
+        if (t->n == 0) {
+            put_str(7, tx, "  No scores yet -- go set one.", PAIR_TEXT, A_NORMAL);
+        } else {
+            for (int i = 0; i < t->n; i++) {
+                const ScoreEntry *e = &t->e[i];
+
+                snprintf(buf, sizeof buf,
+                         "%2d   %-4s  %7d   %3d   %5d   %s",
+                         i + 1, e->name, e->score, e->level, e->lines, e->date);
+                put_str(7 + i, tx, buf,
+                        i == 0 ? PAIR_LABEL : PAIR_TEXT,
+                        i == 0 ? A_BOLD : A_NORMAL);
+            }
+        }
+
+        center_text(LINES - 2, "L/R switch mode    Esc/Q back",
+                    PAIR_FRAME, A_NORMAL);
+        refresh();
+
+        while ((ch = getch()) != ERR) {
+            if (ch == 27 || ch == 'q' || ch == 'Q' ||
+                ch == '\n' || ch == '\r')
+                return SCR_MENU;
+            if (ch == KEY_LEFT)
+                m = (m + NUM_MODES - 1) % NUM_MODES;
+            else if (ch == KEY_RIGHT)
+                m = (m + 1) % NUM_MODES;
+        }
+        napms(16);
+    }
+    *mode = m;
+    return SCR_QUIT;
+}
+
+static Screen run_game_over(const Game *g)
+{
+    while (!g_quit) {
+        int ch;
+
+        draw(g);                    /* final board + GAME OVER panel */
+
+        while ((ch = getch()) != ERR) {
+            switch (ch) {
+            case 'r': case 'R': return SCR_GAME;
+            case 'm': case 'M': return SCR_MENU;
+            case 'q': case 'Q': return SCR_QUIT;
+            default: break;
+            }
+        }
+        napms(16);
+    }
+    return SCR_QUIT;
+}
+
+static Screen run_game(int mi)
+{
+    const GameMode *m = &MODES[mi];
+    Game g;
+
+    memset(&g, 0, sizeof g);
+    g.mode      = m;
+    g.level     = m->start_level;
+    g.running   = 1;
+    g.last_drop = now_ms();
+
+    bag_pos = NUM_PIECES;           /* fresh bag every game */
+    g.next  = next_piece();
+    spawn(&g);
+
+    while (g.running && !g_quit && !g.over) {
+        int ch;
+
+        /* Drain every pending keypress before ticking the clock. */
+        while ((ch = getch()) != ERR)
+            handle_input(&g, ch, now_ms());
+
+        if (g_quit)
+            break;
+
+        if (screen_too_small()) {
+            napms(100);
+            continue;
+        }
+
+        if (!g.over && !g.paused) {
+            long now = now_ms();
+            if (now - g.last_drop >= drop_interval_ms(&g)) {
+                g.last_drop = now;
+                if (!try_move(&g, 0, 1))
+                    lock_piece(&g);
+            }
+        }
+
+        draw(&g);
+        napms(16);                  /* ~60 fps */
+    }
+
+    if (!g.over)
+        return SCR_QUIT;            /* the player quit mid-game */
+
+    /* Offer a place on the table if this run earned one. */
+    if (qualifies(mi, g.score)) {
+        ScoreEntry e;
+        char name[INITIALS + 1];
+
+        snprintf(e.name, sizeof e.name, "---");
+        e.score = g.score;
+        e.level = g.level;
+        e.lines = g.lines;
+        today(e.date, sizeof e.date);
+
+        if (run_initials_entry(&e, name)) {
+            memcpy(e.name, name, sizeof e.name);
+            insert_score(mi, &e);
+            save_scores();
+        }
+    }
+
+    return run_game_over(&g);
 }
 
 /* ------------------------------------------------------------------- main */
 
 int main(void)
 {
-    Game g;
-    int again = 1;
+    Screen screen = SCR_MENU;
+    int mode = 0;
 
     if (initscr() == NULL) {
         fprintf(stderr, "tetris: failed to initialise ncurses\n");
@@ -585,48 +1196,17 @@ int main(void)
 
     srand((unsigned)time(NULL) ^ (unsigned)getpid());
     init_shapes();
+    load_scores();
 
-    while (again) {
-        memset(&g, 0, sizeof g);
-        g.level     = 1;
-        g.running   = 1;
-        g.last_drop = now_ms();
-
-        bag_pos = NUM_PIECES;          /* fresh bag each game */
-        g.next  = next_piece();
-        spawn(&g);
-
-        while (g.running && !g_quit) {
-            int ch;
-
-            /* Drain every pending keypress before ticking the clock. */
-            while ((ch = getch()) != ERR)
-                handle_input(&g, ch, now_ms());
-
-            if (g_quit)
-                break;
-
-            if (!g.over && !g.paused) {
-                long now = now_ms();
-                if (now - g.last_drop >= drop_interval_ms(&g)) {
-                    g.last_drop = now;
-                    if (!try_move(&g, 0, 1))
-                        lock_piece(&g);
-                }
-            }
-
-            draw(&g);
-            napms(16);                /* ~60 fps */
+    while (screen != SCR_QUIT && !g_quit) {
+        switch (screen) {
+        case SCR_MENU:   screen = run_menu(&mode);   break;
+        case SCR_SCORES: screen = run_scores(&mode); break;
+        case SCR_GAME:   screen = run_game(mode);    break;
+        case SCR_QUIT:   break;
         }
-
-        again = g.restart && !g_quit;
     }
 
     endwin();
-
-    if (g.over)
-        printf("Game over -- final score %d, %d lines, level %d.\n",
-               g.score, g.lines, g.level);
-
     return 0;
 }
