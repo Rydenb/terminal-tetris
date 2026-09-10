@@ -1,0 +1,17 @@
+# Compiled game binary
+tetris
+
+# Object files and archives
+*.o
+*.a
+*.so
+
+# Editor / IDE noise
+*.swp
+*~
+.vscode/
+.idea/
+
+# Build and debug leftovers
+*.dSYM/
+core
