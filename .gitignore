@@ -15,3 +15,6 @@ tetris
 # Build and debug leftovers
 *.dSYM/
 core
+
+# Local session export / scratch notes -- never commit these
+tetris.txt

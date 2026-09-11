@@ -9,21 +9,13 @@
   <a href="tetris.c"><img src="https://img.shields.io/badge/C-C99-00599C.svg?logo=c&logoColor=white" alt="Written in C99"></a>
   <img src="https://img.shields.io/badge/TUI-ncurses-3A7D44.svg?logo=gnu&logoColor=white" alt="Runs on ncurses">
   <img src="https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-E95420.svg?logo=ubuntu&logoColor=white" alt="Platform: Ubuntu and Debian">
-  <a href="tetris.c"><img src="https://img.shields.io/badge/source-1%20file%20%C2%B7%201.3k%20lines-4B8BBE.svg" alt="One file, about 1.3k lines"></a>
 </p>
-
-<p>
-  <a href="https://github.com/aacanadaa/terminal-tetris/stargazers"><img src="https://img.shields.io/github/stars/aacanadaa/terminal-tetris?style=social" alt="GitHub stars"></a>
-  <a href="https://github.com/aacanadaa/terminal-tetris/forks"><img src="https://img.shields.io/github/forks/aacanadaa/terminal-tetris?style=social" alt="GitHub forks"></a>
-  <a href="https://github.com/aacanadaa/terminal-tetris/commits/main"><img src="https://img.shields.io/github/last-commit/aacanadaa/terminal-tetris?color=4B8BBE" alt="Last commit"></a>
-  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="Pull requests welcome">
-</p>
-
-<p>Single file, no build system, no dependencies beyond libncurses. Comes with a
-game menu, a persistent arcade-style high score table, and a game mode system
-that is ready for more variants.</p>
 
 </div>
+
+Single file, no build system, no dependencies beyond libncurses. Comes with a
+game menu, a persistent arcade-style high score table, and a game mode system
+that is ready for more variants.
 
 **The menu** — pick a mode with Left/Right, pick an action with Up/Down:
 
@@ -32,7 +24,6 @@ that is ready for more variants.</p>
            ──────────────────────────────
 
                Mode    <  Marathon  >
-
  Classic endless tetris. Clear lines, survive, score.
 
            ──────────────────────────────
@@ -65,12 +56,12 @@ lands, the next-piece preview, and the live counters:
 │. . . . . . . . . . │  Next
 │. . . . . . . . . . │  . [][]
 │. . . . . . . . . . │  [][].
-│. . . . . []. . . . │
-│. . . [][][]. . . . │  L/R   move
-│[][][][][][]. . . . │  Up    rotate
-│[][]. . . []. . . . │  Dn    soft drop
-│[][]. . . [][][][]. │  Space hard drop
-│. [][]. . . . [][][]│  P     pause
+│. . . . . []. . . . │  L/R   move
+│. . . [][][]. . . . │  Up    rotate
+│[][][][][][]. . . . │  Dn    soft drop
+│[][]. . . []. . . . │  Space hard drop
+│[][]. . . [][][][]. │  P     pause
+│. [][]. . . . [][][]│  M     menu
 └────────────────────┘  Q     quit
 ```
 
