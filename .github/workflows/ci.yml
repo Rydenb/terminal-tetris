@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Nothing here writes to the repository, so the token only needs read access.
+# That is also what a pull request from a fork gets, which is the point: an
+# outside contribution is tested without being trusted.
+permissions:
+  contents: read
+
+# A new push to the same branch makes the previous run obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libncurses-dev python3-venv
+
+      # -Werror is the point: a warning must fail the build rather than scroll
+      # past in a log nobody reads.
+      - name: Compile clean under -Wall -Wextra
+        run: gcc -O2 -Wall -Wextra -Werror tetris.c -o /tmp/tetris -lncurses
+
+      # The README advertises macOS and the BSDs, and only Linux is tested, so
+      # this compile is the only guard against a GNU extension creeping in.
+      - name: Compile as strict POSIX
+        run: |
+          gcc -std=c99 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror \
+            tetris.c -o /tmp/tetris-posix -lncurses
+
+      - name: Run the pty test suite
+        run: ./tests/run_tests.sh
+
+      # Rebuilds the same binaries instrumented and re-runs all three suites.
+      # Depends on the previous step having populated the scratch directory.
+      - name: Run the pty test suite under ASan + UBSan
+        run: ./tests/run_sanitizers.sh
+
+  packaging:
+    name: Installers and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libncurses-dev
+
+      - name: install.sh installs and uninstalls
+        run: |
+          ./install.sh --user
+          test -x "$HOME/.local/bin/tetris"
+          export PATH="$HOME/.local/bin:$PATH"
+          command -v tetris
+          ./install.sh --user --uninstall
+          test ! -e "$HOME/.local/bin/tetris"
+
+      - name: build-deb.sh produces a valid package
+        run: |
+          ./build-deb.sh
+          dpkg-deb --info dist/terminal-tetris_*_amd64.deb
+          dpkg-deb --contents dist/terminal-tetris_*_amd64.deb
+
+      - name: the packaged binary and man page are real
+        run: |
+          dpkg-deb -x dist/terminal-tetris_*_amd64.deb /tmp/deb
+          file /tmp/deb/usr/bin/tetris | grep -q ELF
+          test -s /tmp/deb/usr/share/man/man6/tetris.6.gz

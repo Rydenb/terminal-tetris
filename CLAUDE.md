@@ -207,6 +207,17 @@ end-to-end. Build artifacts, the venv and the score tables all go to
 into the repo. It finishes by asserting `tetris.c` is unchanged from HEAD and
 that the constants the variants shorten still hold their shipped values.
 
+`tests/run_sanitizers.sh` then rebuilds those same three binaries with
+AddressSanitizer and UndefinedBehaviorSanitizer and re-runs all three suites
+against them. It reuses `$TETRIS_WORK`, so `run_tests.sh` has to run first. Two
+details matter there: it asserts `libasan` actually linked before trusting a
+green result, since a build the sanitizers never attached to would pass for
+entirely the wrong reason; and it sets `detect_leaks=0`, because ncurses holds
+allocations until `endwin()` and the exit report is pure noise. Both scripts run
+on every push and pull request through `.github/workflows/ci.yml`, which also
+compiles with `-Werror` and separately with `-D_POSIX_C_SOURCE` to guard the
+portability the README advertises.
+
 The game is a full-screen TUI, so it cannot be run in a plain shell — it needs a
 pty. The pattern that works:
 
