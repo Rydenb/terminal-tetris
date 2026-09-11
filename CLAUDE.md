@@ -4,7 +4,8 @@ Project memory for Claude Code. Read this before changing anything here.
 
 ## Project
 
-A complete Tetris game for the Ubuntu terminal, written in C against ncurses.
+A complete Tetris game for the terminal, written in C against ncurses. Runs on
+any POSIX system with ncurses — Linux, macOS and the BSDs.
 Deliberately a **single translation unit** — no Makefile, no headers, no
 subdirectories. Everything lives in `tetris.c`, currently ~1100 lines.
 
@@ -23,12 +24,30 @@ System dependency (Ubuntu/Debian):
 sudo apt update && sudo apt install -y build-essential libncurses-dev
 ```
 
+Keep the code **pure POSIX C99**. The README advertises macOS and the BSDs, so
+reaching for a GNU extension silently breaks a supported platform. The cheap
+check is to compile with the POSIX feature macro set, which hides anything
+glibc-only:
+
+```sh
+gcc -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra tetris.c -o /dev/null -lncurses
+```
+
+No `<linux/*>`, no `/proc`, no epoll or inotify, no `strdupa`/`asprintf`-style
+extensions. Note that **only Linux is covered by the test suite**, so a
+portability regression will not be caught automatically — the compile above is
+the only guard there is.
+
 There is no Makefile on purpose. If you find yourself wanting one, the change
 is out of scope for this project. Installation lives in shell scripts instead:
 
 - `install.sh` — builds and installs the binary as `tetris`. Defaults to
   `/usr/local/bin` (using sudo only when that is not writable), `--user` for
-  `~/.local/bin`, `--prefix DIR`, `--uninstall`.
+  `~/.local/bin`, `--prefix DIR`, `--uninstall`. **`--uninstall` resolves the
+  same prefix as install does**, so it only removes what the matching install
+  put there — a `--user` install needs `--user --uninstall`, and a bare
+  `--uninstall` will silently find nothing. It prints a hint when that happens,
+  but the failure mode is "nothing happened", not an error.
 - `build-deb.sh` — produces `dist/terminal-tetris_<version>_<arch>.deb`, which
   installs to `/usr/bin` for every user and declares `libncurses6`.
 - `packaging/tetris.6` — the man page, shipped by the `.deb`.
@@ -246,6 +265,30 @@ Check by hand after touching rules or screens:
   reads from disk, not just from memory.
 - A deliberately corrupted score file (junk rows, unknown mode, over-long
   initials, raw escape bytes) loading without crashing.
+
+## Releasing
+
+The version lives in exactly one place: the `version=${1:-...}` default at the
+top of `build-deb.sh`. Bump it so it matches the git tag, or the `.deb` ships
+with a version that disagrees with the release it came from.
+
+```sh
+# bump the default in build-deb.sh and commit that first
+./tests/run_tests.sh            # confirms tetris.c is still untouched
+./build-deb.sh                  # -> dist/terminal-tetris_<v>_<arch>.deb
+git tag -a v<v> -m "..."
+git push origin main && git push origin v<v>
+gh release create v<v> --title "terminal-tetris v<v>" \
+    --notes-file <notes> dist/terminal-tetris_<v>_<arch>.deb tetris.c
+```
+
+Verify the upload rather than trusting it: download the asset back and `cmp` it
+against the local build. `gh release create` marks the newest non-prerelease as
+Latest automatically, so there is no need to touch the older one.
+
+**Never retag, move or delete a published tag** — cut a new version instead.
+`v1.0.0` is permanently at `470d71c`, which predates the pty test suite, and
+that is fine; it is not a reason to rewrite history.
 
 ## Git
 

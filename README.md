@@ -2,13 +2,14 @@
 
 <h1>terminal-tetris</h1>
 
-<p><strong>A complete Tetris game for the Ubuntu terminal, written in C with ncurses.</strong></p>
+<p><strong>A complete Tetris game for your terminal, written in C with ncurses.</strong></p>
 
 <p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="tetris.c"><img src="https://img.shields.io/badge/C-C99-00599C.svg?logo=c&logoColor=white" alt="Written in C99"></a>
   <img src="https://img.shields.io/badge/TUI-ncurses-3A7D44.svg?logo=gnu&logoColor=white" alt="Runs on ncurses">
-  <img src="https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-E95420.svg?logo=ubuntu&logoColor=white" alt="Platform: Ubuntu and Debian">
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20BSD-2C2D72.svg" alt="Platform: Linux, macOS and BSD">
+  <img src="https://img.shields.io/badge/packaging-.deb-A80030.svg?logo=debian&logoColor=white" alt="Ships a Debian package">
 </p>
 
 </div>
@@ -141,12 +142,23 @@ And none of it is a Makefile: this project deliberately does not have one.
 
 ## Requirements
 
-Only needed to build from source — the installers handle the rest. Ubuntu /
-Debian, and the ncurses development headers:
+Only needed to build from source — the installers handle the rest.
 
-```sh
-sudo apt update && sudo apt install -y build-essential libncurses-dev
-```
+The game is POSIX C99 and needs nothing beyond ncurses. It builds clean under
+`-std=c99 -D_POSIX_C_SOURCE=200809L` with no GNU or glibc extensions, and uses
+only long-standing ncurses calls (`initscr`, `use_default_colors`, `napms` and
+the basics), so it is not tied to one library version or one flavour of Unix.
+
+- **Ubuntu / Debian** — `sudo apt install -y build-essential libncurses-dev`
+- **macOS** — `xcode-select --install`; ncurses ships with the system
+- **FreeBSD / OpenBSD / NetBSD** — ncurses is in the base system, so there is
+  nothing to install
+
+Then build it as shown below.
+
+> Developed and tested on Linux. The other platforms are expected to work — the
+> source is pure POSIX and the curses calls are all baseline — but they are not
+> covered by the test suite, which drives a real pty.
 
 ## Build
 
