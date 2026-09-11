@@ -306,3 +306,21 @@ that is fine; it is not a reason to rewrite history.
 Default branch is `main`. Do not commit the `tetris` binary — it is in
 `.gitignore` and always will be. The score file lives outside the repo, so it is
 never a commit risk.
+
+`main` is protected. Force-pushes and deletions are blocked, and `Build and test`
+plus `Installers and package` must pass before a pull request can be merged, so
+an outside contribution cannot land on a red build. `enforce_admins` is
+deliberately **off**, which keeps the owner's direct pushes working.
+
+That last part is the sharp edge, and it is not obvious: with `enforce_admins`
+**on**, `required_status_checks` binds direct pushes too, not just pull-request
+merges. A plain `git push origin main` then fails with
+`GH006: 2 of 2 required status checks are expected`, because the new commit has
+no check run yet, and the only way in becomes a branch, a pull request and a
+merge. Turning `enforce_admins` off restores the one-step push while leaving the
+gate on incoming pull requests. The cost is that the owner can also bypass the
+force-push and deletion blocks — so those guard against accidents and outside
+collaborators, not against the owner.
+
+Do **not** enable "Require approvals" — GitHub will not let you approve your own
+pull request, so requiring one locks the sole maintainer out of merging.
