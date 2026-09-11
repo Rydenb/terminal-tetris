@@ -102,12 +102,7 @@ system entirely:
 ```
 
 The installer checks for a compiler and the ncurses headers before it starts,
-and prints the exact `apt` line if either is missing. Either form is undone
-with:
-
-```sh
-./install.sh --uninstall
-```
+and prints the exact `apt` line if either is missing.
 
 ### Building the package yourself
 
@@ -116,9 +111,33 @@ with:
 sudo apt install ./dist/terminal-tetris_*_amd64.deb
 ```
 
-None of this touches your high scores — those live in `$XDG_DATA_HOME` and
-survive both install and uninstall. None of it is a Makefile, either: this
-project deliberately does not have one.
+### Uninstall
+
+Match the flags you installed with. The prefix has to line up, or the script
+looks in the wrong place and finds nothing:
+
+| How you installed it                        | How to undo it                    |
+| ------------------------------------------- | --------------------------------- |
+| `sudo apt install ./terminal-tetris_*.deb`  | `sudo apt remove terminal-tetris` |
+| `./install.sh` (system-wide)                | `./install.sh --uninstall`        |
+| `./install.sh --user`                       | `./install.sh --user --uninstall` |
+
+The two script forms need the clone to still be on disk. If you have since
+deleted it, the install is only a single file:
+
+```sh
+rm ~/.local/bin/tetris           # --user install
+sudo rm /usr/local/bin/tetris    # system-wide install
+```
+
+**Your high scores are not part of the install**, so none of the above removes
+them — they live outside the repo and survive a reinstall. To wipe those too:
+
+```sh
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/terminal-tetris"
+```
+
+And none of it is a Makefile: this project deliberately does not have one.
 
 ## Requirements
 
