@@ -37,10 +37,11 @@
                                 * leaderboard columns without clipping     */
 #define MIN_LINES  22
 
-/* Colour pairs. 1..7 are the tetrominoes, in piece-index order. */
+/* Colour pairs. 1..7 are the tetrominoes, in piece-index order. PAIR_GARBAGE
+ * is also a board value: Dig's pre-filled junk, which no piece ever places. */
 enum {
     PAIR_I = 1, PAIR_J, PAIR_L, PAIR_O, PAIR_S, PAIR_T, PAIR_Z,
-    PAIR_FRAME, PAIR_LABEL, PAIR_TEXT, PAIR_OVER
+    PAIR_FRAME, PAIR_LABEL, PAIR_TEXT, PAIR_OVER, PAIR_GARBAGE
 };
 
 /* Spawn orientations, each inside a 4x4 bounding box.  Rotations 1..3 are
@@ -79,6 +80,7 @@ typedef struct {
     int min_gravity_ms;         /* floor, however high the level climbs    */
     int goal_lines;             /* 0 = endless; otherwise clear this many  */
     int time_limit_sec;         /* 0 = untimed                             */
+    int garbage_rows;           /* 0 = none; otherwise dig out this many   */
     int rank_by_time;           /* 1 = leaderboard sorts by fastest time   */
 } GameMode;
 
@@ -87,25 +89,29 @@ typedef struct {
 static const GameMode MODES[] = {
     { "marathon", "Marathon",
       "Classic endless tetris. Clear lines, survive, score.",
-      1, 10, 800, 70, 80, 0, 0, 0 },
+      1, 10, 800, 70, 80, 0, 0, 0, 0 },
 
     { "sprint", "Sprint",
       "Clear 40 lines as fast as you can. Ranked by time.",
-      1, 10, 800, 70, 80, 40, 0, 1 },
+      1, 10, 800, 70, 80, 40, 0, 0, 1 },
 
     { "ultra", "Ultra",
       "Two minutes. Score as much as you can before time runs out.",
-      1, 10, 800, 70, 80, 0, 120, 0 },
+      1, 10, 800, 70, 80, 0, 120, 0, 0 },
 
     { "expert", "Expert",
       "Starts at level 10 and stays fast. For people who like pain.",
-      10, 10, 800, 70, 80, 0, 0, 0 },
+      10, 10, 800, 70, 80, 0, 0, 0, 0 },
+
+    { "dig", "Dig",
+      "Dig through 10 rows of garbage. Ranked by time.",
+      1, 10, 800, 70, 80, 0, 0, 10, 1 },
 };
 #define NUM_MODES ((int)(sizeof MODES / sizeof MODES[0]))
 
 static int mode_is_timed(const GameMode *m)
 {
-    return m->goal_lines > 0 || m->time_limit_sec > 0;
+    return m->goal_lines > 0 || m->time_limit_sec > 0 || m->garbage_rows > 0;
 }
 
 typedef struct {
@@ -116,13 +122,14 @@ typedef struct {
     int x, y;                     /* top-left of the active 4x4 box        */
     int next;                     /* next piece index                      */
     int score, level, lines;
+    int garbage_left;             /* Dig: rows that still hold garbage     */
     long last_drop;               /* CLOCK_MONOTONIC ms of last gravity step */
     long elapsed_ms;              /* play time so far, excluding pauses    */
     long last_frame;              /* for accumulating elapsed_ms           */
     int running, paused;
     int to_menu;                  /* asked for the menu, rather than a quit */
     int over;                     /* the run is finished, for any reason   */
-    int cleared;                  /* ...because the line goal was reached  */
+    int cleared;                  /* ...because the goal was reached       */
     int timed_out;                /* ...because the clock ran out          */
 } Game;
 
@@ -191,6 +198,7 @@ static void init_colors(void)
     init_pair(PAIR_LABEL, COLOR_CYAN,    -1);
     init_pair(PAIR_TEXT,  COLOR_WHITE,   -1);
     init_pair(PAIR_OVER,  COLOR_RED,     COLOR_BLACK);
+    init_pair(PAIR_GARBAGE, COLOR_WHITE, -1);
 }
 
 /* 7-bag randomiser: every piece appears once per bag, so runs of bad luck
@@ -248,6 +256,22 @@ static void spawn(Game *g)
         g->over = 1;
 }
 
+/* Dig's starting board: the bottom rows full of garbage, one gap per row. A
+ * gap never sits directly under the one above it -- otherwise a single well
+ * drains the whole pile with I pieces and there is nothing to dig. */
+static void add_garbage(Game *g)
+{
+    int gap = -1;
+
+    for (int row = BOARD_H - g->mode->garbage_rows; row < BOARD_H; row++) {
+        gap = gap < 0 ? rand() % BOARD_W
+                      : (gap + 1 + rand() % (BOARD_W - 1)) % BOARD_W;
+        for (int c = 0; c < BOARD_W; c++)
+            g->board[row][c] = c == gap ? 0 : PAIR_GARBAGE;
+    }
+    g->garbage_left = g->mode->garbage_rows;
+}
+
 static int try_move(Game *g, int dx, int dy)
 {
     if (collides(g, g->piece, g->rot, g->x + dx, g->y + dy))
@@ -282,15 +306,21 @@ static void clear_lines(Game *g)
     int cleared = 0;
 
     for (int row = BOARD_H - 1; row >= 0; row--) {
-        int full = 1;
+        int full = 1, junk = 0;
         for (int c = 0; c < BOARD_W; c++) {
             if (!g->board[row][c]) {
                 full = 0;
                 break;
             }
+            if (g->board[row][c] == PAIR_GARBAGE)
+                junk = 1;
         }
         if (!full)
             continue;
+
+        /* Dig counts garbage rows, not lines: a line cleared above the
+         * garbage leaves exactly as much still to dig. */
+        g->garbage_left -= junk;
 
         /* Drop everything above this row down by one. */
         for (int r = row; r > 0; r--)
@@ -658,7 +688,13 @@ static void draw_frame(int fx, int fy, int w, int h, int pair)
 
 static void draw_cell(int x, int y, int pair, int filled)
 {
-    if (filled) {
+    /* Garbage gets its own glyph, not just a colour: it must still read as
+     * junk on a monochrome terminal, and white alone is the O piece. */
+    if (filled && pair == PAIR_GARBAGE) {
+        attron(COLOR_PAIR(pair));
+        mvaddstr(y, x, "##");
+        attroff(COLOR_PAIR(pair));
+    } else if (filled) {
         attron(COLOR_PAIR(pair) | A_BOLD);
         mvaddstr(y, x, "[]");
         attroff(COLOR_PAIR(pair) | A_BOLD);
@@ -803,11 +839,16 @@ static void draw_panel(const Game *g, const Layout *L)
         panel_field(&cy, x, "Level", buf);
     }
 
-    if (m->goal_lines > 0)
-        snprintf(buf, sizeof buf, "%d/%d", g->lines, m->goal_lines);
-    else
-        snprintf(buf, sizeof buf, "%d", g->lines);
-    panel_field(&cy, x, "Lines", buf);
+    if (m->garbage_rows > 0) {
+        snprintf(buf, sizeof buf, "%d", g->garbage_left);
+        panel_field(&cy, x, "Garbage", buf);
+    } else {
+        if (m->goal_lines > 0)
+            snprintf(buf, sizeof buf, "%d/%d", g->lines, m->goal_lines);
+        else
+            snprintf(buf, sizeof buf, "%d", g->lines);
+        panel_field(&cy, x, "Lines", buf);
+    }
 
     panel_label(cy, x, "Next");
     draw_preview(g, x, cy + 1);
@@ -1206,13 +1247,14 @@ static Screen run_game_over(const Game *g)
     return SCR_QUIT;
 }
 
-/* A mode can end without topping out: clear the line goal, or run out of
- * clock. Both are checked once per unpaused frame. */
+/* A mode can end without topping out: clear the line goal, dig out the
+ * garbage, or run out of clock. All are checked once per unpaused frame. */
 static void check_objective(Game *g)
 {
     const GameMode *m = g->mode;
 
-    if (m->goal_lines > 0 && g->lines >= m->goal_lines) {
+    if ((m->goal_lines > 0 && g->lines >= m->goal_lines) ||
+        (m->garbage_rows > 0 && g->garbage_left <= 0)) {
         g->over    = 1;
         g->cleared = 1;
     } else if (m->time_limit_sec > 0 &&
@@ -1236,6 +1278,7 @@ static Screen run_game(int mi)
 
     bag_pos = NUM_PIECES;           /* fresh bag every game */
     g.next  = next_piece();
+    add_garbage(&g);
     spawn(&g);
 
     while (g.running && !g_quit && !g.over) {

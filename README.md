@@ -238,15 +238,21 @@ If your score makes the top 10, you get an arcade-style prompt:
 | **Sprint**   | Clear 40 lines as fast as you can.                          | **Time**  |
 | **Ultra**    | Two minutes on the clock. Score as much as you can.         | Score     |
 | **Expert**   | Endless, but starts at level 10 — gravity opens at 170 ms per step instead of 800. | Score |
+| **Dig**      | Start on 10 rows of garbage, one gap each. Dig them all out as fast as you can. | **Time** |
 
 Gravity ramps from 800 ms per step down to a floor of 80 ms, and the level rises
 every 10 lines, except in Expert which starts partway up that curve.
 
-Sprint ranks by **fastest time**, not highest score — its leaderboard shows a
-`TIME` column instead of `SCORE`. A time is only recorded if you actually clear
-all 40 lines; bailing out at 30 does not post an unbeatable short time. The HUD
+Sprint and Dig rank by **fastest time**, not highest score — their leaderboards
+show a `TIME` column instead of `SCORE`. A time is only recorded if you actually
+finish; bailing out at 30 lines does not post an unbeatable short time. The HUD
 swaps the level readout for a clock in any mode with an objective, counting up
-in Sprint and down in Ultra.
+in Sprint and Dig and down in Ultra.
+
+In Dig the garbage is drawn as `##`, and no gap sits directly under the one
+above it, so you cannot drain the pile down a single well. The HUD counts the
+garbage rows left instead of lines: a line cleared above the garbage does not
+bring you any closer.
 
 Adding a mode is a single row in the `MODES[]` table at the top of `tetris.c` —
 the rules engine, the menu, the HUD and the score tables all read their
@@ -316,16 +322,16 @@ Soft dropping adds 1 point per cell; hard dropping adds 2.
 ## Testing
 
 The game is a full-screen TUI, so it can't be exercised in a plain shell — it
-needs a pty. `tests/run_tests.sh` sets one up, builds the game, and runs three
+needs a pty. `tests/run_tests.sh` sets one up, builds the game, and runs four
 suites against it:
 
 ```sh
 tests/run_tests.sh
 ```
 
-It covers all four mode HUDs, drop scoring, pause, the terminal-size gate,
-score-file parsing, and both end conditions end-to-end (Ultra timing out to
-`TIME UP`, Sprint reaching `CLEARED` with a time on the board). Everything it
+It covers all five mode HUDs, drop scoring, pause, the terminal-size gate,
+score-file parsing, and every end condition end-to-end (Ultra timing out to
+`TIME UP`, Sprint and Dig reaching `CLEARED` with a time on the board). Everything it
 builds goes to `$TETRIS_WORK` (default `/tmp/terminal-tetris-test`), so your
 working tree is left alone — the run finishes by verifying that.
 
@@ -333,7 +339,7 @@ Needs `python3` with `venv`. `pyte` is installed into a venv for you.
 
 The end conditions that would otherwise take minutes to reach are exercised via
 variants built on the fly with a shortened constant — a 3-second Ultra clock, a
-one-line Sprint goal. Same code path, different numbers.
+one-line Sprint goal, a single row of Dig garbage. Same code path, different numbers.
 
 ## Layout
 

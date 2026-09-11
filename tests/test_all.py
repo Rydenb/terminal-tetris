@@ -52,6 +52,17 @@ def board(rows):
     return out
 
 
+def cells(rows, width=10):
+    """Board rows as lists of 2-char cells. Located by the left frame border
+    only: the panel's text (e.g. "Next") can hold an 'x' of its own."""
+    out = []
+    for r in rows:
+        if r.lstrip().startswith("x"):
+            fx = r.index("x")
+            out.append([r[fx + 1 + 2 * c:fx + 3 + 2 * c] for c in range(width)])
+    return out
+
+
 def ms(clock):
     """Parse m:ss.t into milliseconds, or None."""
     try:
@@ -99,6 +110,30 @@ u2 = ms(panel(h.text(), "Time"))
 check("Ultra clock counts DOWN", u1 is not None and u2 is not None and u2 < u1,
       "%s -> %s" % (panel(rows, "Time"), panel(h.text(), "Time")))
 check("Ultra shows plain line count, not N/40", find(rows, "/40") == -1)
+h.close()
+
+# ---- Dig: 10 garbage rows, a Garbage countdown, clock counts UP ------------
+h = start(mode_rights=4)
+rows = h.text()
+board_rows = cells(rows)
+junk = board_rows[-10:]
+check("Dig starts with 10 garbage rows, one gap each",
+      len(junk) == 10 and all(r.count("##") == 9 and r.count(". ") == 1 for r in junk),
+      str(["".join(r) for r in junk]))
+check("nothing but air above the garbage",
+      len(board_rows) == 20 and not any("##" in r for r in board_rows[:-10]))
+gaps = [r.index(". ") for r in junk if ". " in r]
+check("no gap sits directly under the one above",
+      len(gaps) == 10 and all(a != b for a, b in zip(gaps, gaps[1:])), str(gaps))
+check("Dig HUD shows Garbage 10", panel(rows, "Garbage") == "10",
+      "got %r" % panel(rows, "Garbage"))
+check("Dig HUD has no Level or Lines readout",
+      find(rows, "Level") == -1 and find(rows, "Lines") == -1)
+d1 = ms(panel(rows, "Time"))
+h.pump(1.2)
+d2 = ms(panel(h.text(), "Time"))
+check("Dig clock counts UP", d1 is not None and d2 is not None and d2 > d1,
+      "%s -> %s" % (panel(rows, "Time"), panel(h.text(), "Time")))
 h.close()
 
 # ---- Marathon: score 0, hard drop and soft drop score ----------------------

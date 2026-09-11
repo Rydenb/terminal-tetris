@@ -49,25 +49,33 @@ import re, sys
 src_path, out_dir = sys.argv[1], sys.argv[2]
 src = open(src_path).read()
 
+def shorten(text, mode, old, new):
+    """Swap one constant inside a single MODES[] row, and nowhere else."""
+    i = text.index('{ "%s",' % mode)
+    j = text.index(old, i)
+    assert j < text.index("},", i), "%r not found in the %s row" % (old, mode)
+    return text[:j] + new + text[j + len(old):]
+
 # Ultra: 120s clock -> 3s, so TIME UP is reachable in seconds.
-i = src.index('{ "ultra", "Ultra",')
-j = src.index("0, 120, 0 }", i)
-ultra = src[:j] + "0, 3, 0 }" + src[j + len("0, 120, 0 }"):]
-assert "0, 120, 0 }" not in ultra
+ultra = shorten(src, "ultra", "0, 120, 0, 0 }", "0, 3, 0, 0 }")
+assert "0, 120, 0, 0 }" not in ultra
 open(out_dir + "/tetris-ultra-short.c", "w").write(ultra)
 
 # Sprint: narrow the board so one piece can complete a row, and shorten the
 # goal to 1 line. Spawn x is (BOARD_W - BOX) / 2, so it stays in bounds.
 out, n = re.subn(r"#define BOARD_W\s+10", "#define BOARD_W    4", src, count=1)
 assert n == 1, "board width not replaced"
-i = out.index('{ "sprint", "Sprint",')
-j = out.index("80, 40, 0, 1 }", i)
-narrow = out[:j] + "80, 1, 0, 1 }" + out[j + len("80, 40, 0, 1 }"):]
+narrow = shorten(out, "sprint", "80, 40, 0, 0, 1 }", "80, 1, 0, 0, 1 }")
 open(out_dir + "/tetris-narrow.c", "w").write(narrow)
+
+# Dig: 10 rows of garbage -> 1, so a single well-placed piece digs it out.
+dig = shorten(src, "dig", "80, 0, 0, 10, 1 }", "80, 0, 0, 1, 1 }")
+open(out_dir + "/tetris-dig-short.c", "w").write(dig)
 print("   variants generated")
 PY
 build "$WORK/tetris-ultra-short.c" "$WORK/tetris-ultra-short"
 build "$WORK/tetris-narrow.c" "$WORK/tetris-narrow"
+build "$WORK/tetris-dig-short.c" "$WORK/tetris-dig-short"
 
 # ---- 4. pyte, in a venv (never system python) ------------------------------
 if [ ! -x "$WORK/venv/bin/python" ]; then
@@ -79,7 +87,7 @@ PY="$WORK/venv/bin/python"
 
 # ---- 5. the suites ---------------------------------------------------------
 rc=0
-for suite in test_all.py test_timeup.py test_cleared.py; do
+for suite in test_all.py test_timeup.py test_cleared.py test_dig.py; do
     say "$suite"
     (cd "$HERE" && "$PY" "$HERE/$suite") || rc=1
 done
@@ -93,7 +101,8 @@ else
     echo "   WARNING: $(basename "$SRC") differs from HEAD"; rc=1
 fi
 # The constants the variants shorten must still hold their shipped values.
-for pat in "#define BOARD_W    10" "80, 40, 0, 1 }" "0, 120, 0 }"; do
+for pat in "#define BOARD_W    10" "80, 40, 0, 0, 1 }" "0, 120, 0, 0 }" \
+           "80, 0, 0, 10, 1 }"; do
     grep -qF "$pat" "$SRC" || { echo "   WARNING: missing '$pat'"; rc=1; }
 done
 echo "   shipped constants intact"

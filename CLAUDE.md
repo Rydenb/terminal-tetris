@@ -111,8 +111,9 @@ garbage.
 
 `MODES[]` near the top is the single source of truth for mode behaviour — name,
 blurb, starting level, lines-per-level, the gravity curve, and any objective
-(`goal_lines`, `time_limit_sec`) or ranking rule (`rank_by_time`). There are **no
-hard-coded 800 / 70 / 80 / 10 / 40 / 120 constants anywhere else in the file**;
+(`goal_lines`, `time_limit_sec`, `garbage_rows`) or ranking rule (`rank_by_time`).
+There are **no hard-coded 800 / 70 / 80 / 10 / 40 / 120 constants anywhere else
+in the file**;
 the engine reads them off `Game::mode`. Adding a mode is one row in that table
 plus a `blurb`.
 
@@ -124,6 +125,13 @@ between a Level readout and a clock. `check_objective()` runs once per unpaused
 frame and is the only place a run can end without topping out. It sets `over`
 plus either `cleared` or `timed_out`, and `draw()` turns that into the panel
 title (`CLEARED` / `TIME UP` / `GAME OVER`).
+
+Dig's objective is garbage, not lines. `add_garbage()` fills the bottom
+`garbage_rows` rows with `PAIR_GARBAGE` cells before the first spawn, and
+`clear_lines()` decrements `garbage_left` only for a cleared row that still held
+garbage, so a line cleared above the pile does not count. Garbage is drawn as
+`##`, not `[]`, so it stays distinct from the white O piece and on monochrome
+terminals.
 
 Time-ranked modes sort **ascending** — fastest first — via `entry_better()`.
 `qualifies()` refuses an entry with no recorded time, so an abandoned Sprint can
@@ -151,8 +159,9 @@ loop and independent gravity work.
 - `SHAPE_SRC` holds only the **spawn orientation** of each tetromino. The other
   three rotations are generated at start-up in `init_shapes()`. Never hand-write
   rotation tables.
-- The board stores `0` for empty and `piece + 1` for a settled cell, so the
-  stored value *is* the ncurses colour-pair index. Intentional.
+- The board stores `0` for empty, `piece + 1` for a settled cell and
+  `PAIR_GARBAGE` for Dig's pre-filled junk, so the stored value *is* the
+  ncurses colour-pair index. Intentional.
 - `compute_layout()` runs every frame, so resizes are picked up for free.
 - `draw_panel_box()` / `panel_center()` / `board_panel()` are the reusable
   panel primitives. `board_panel()` sizes itself to its longest line and is
@@ -200,8 +209,8 @@ gcc -Wall -Wextra tetris.c -o tetris -lncurses
 ```
 
 `tests/run_tests.sh` builds the game, generates the variants described below,
-and runs the three suites against it — 38 checks covering the four mode HUDs,
-scoring, pause, size gating, score-file parsing, and both end conditions
+and runs the four suites against it — 57 checks covering the five mode HUDs,
+scoring, pause, size gating, score-file parsing, and every end condition
 end-to-end. Build artifacts, the venv and the score tables all go to
 `$TETRIS_WORK` (default `/tmp/terminal-tetris-test`), so the runner never writes
 into the repo. It finishes by asserting `tetris.c` is unchanged from HEAD and
@@ -251,6 +260,11 @@ the constant shortened (`sed` the `time_limit_sec` field of that mode's row) and
 drive that instead. Same code path, different constant. Afterwards confirm the
 shipped source still holds the real value; never test by editing the repo file.
 
+Dig's variant cuts `garbage_rows` to 1 and needs no bot: the ghost piece is
+drawn where a hard drop lands, so `test_dig.py` probes every rotation and
+column until the ghost covers the bottom row's gap, then drops. An O can never
+plug a one-cell gap, so an attempt with no fit is simply retried.
+
 Check by hand after touching rules or screens:
 
 - Rotating flush against each of the four walls (wall kicks).
@@ -259,6 +273,9 @@ Check by hand after touching rules or screens:
   `N/40` for Sprint, a counting-**down** clock for Ultra.
 - Sprint ending at exactly 40 lines: `CLEARED` panel, a time written to the
   score file, and a TIME-ranked board with the fastest first.
+- Dig: 10 rows of `##` with no gap directly under another, `Garbage` counting
+  down only when a garbage row goes (not for lines cleared above it), and
+  `CLEARED` with a time once it reaches 0.
 - Stacking out: the initials prompt appears only if the score qualifies, `Esc`
   skips without saving, and `Enter` persists it.
 - The score surviving a full restart — relaunch and check the leaderboard
