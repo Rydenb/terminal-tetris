@@ -107,12 +107,51 @@ fi
 
 [ -f "$SRC" ] || die "cannot find tetris.c next to this script (looked in $SRC_DIR)"
 
+# The game is portable, so the installer has to be too. Printing a Debian `apt`
+# line at a macOS user is worse than printing nothing, so branch on the platform
+# before falling back to sniffing /etc/os-release.
+os_id() {
+    [ -r /etc/os-release ] || return 0
+    ( . /etc/os-release 2>/dev/null || exit 0; printf '%s %s' "${ID:-}" "${ID_LIKE:-}" )
+}
+
+toolchain_hint() {
+    case $(uname -s 2>/dev/null) in
+        Darwin)
+            printf '  xcode-select --install\n'
+            return ;;
+        FreeBSD)
+            printf '  pkg install gcc ncurses\n'
+            return ;;
+        OpenBSD|NetBSD|DragonFly)
+            printf '  # ncurses is in the base system; install a C compiler\n'
+            return ;;
+    esac
+
+    case " $(os_id) " in
+        *debian*|*ubuntu*) printf '  sudo apt update && sudo apt install -y build-essential libncurses-dev\n' ;;
+        *fedora*|*rhel*)   printf '  sudo dnf install -y gcc ncurses-devel\n' ;;
+        *arch*)            printf '  sudo pacman -S --needed base-devel ncurses\n' ;;
+        *suse*)            printf '  sudo zypper install -y gcc ncurses-devel\n' ;;
+        *alpine*)          printf '  sudo apk add build-base ncurses-dev\n' ;;
+        *)                 printf '  install a C compiler and the ncurses development headers\n' ;;
+    esac
+}
+
 command -v "$CC" >/dev/null 2>&1 || die "no C compiler found ($CC). Install the toolchain with:
-  sudo apt update && sudo apt install -y build-essential libncurses-dev"
+$(toolchain_hint)"
+
+# On macOS $CC exists as a stub that fails until the Xcode command line tools
+# are installed, so run it rather than trusting PATH -- otherwise the ncurses
+# check below reports missing headers and sends you chasing the wrong problem.
+if ! printf 'int main(void){return 0;}\n' | "$CC" -x c -fsyntax-only - >/dev/null 2>&1; then
+    die "the C compiler ($CC) is present but does not work. Install the toolchain with:
+$(toolchain_hint)"
+fi
 
 if ! printf '#include <ncurses.h>\n' | "$CC" -x c -fsyntax-only - >/dev/null 2>&1; then
     die "the ncurses headers are missing. Install them with:
-  sudo apt update && sudo apt install -y libncurses-dev"
+$(toolchain_hint)"
 fi
 
 # --- build -----------------------------------------------------------------
