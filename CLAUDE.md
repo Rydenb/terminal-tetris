@@ -24,7 +24,22 @@ sudo apt update && sudo apt install -y build-essential libncurses-dev
 ```
 
 There is no Makefile on purpose. If you find yourself wanting one, the change
-is out of scope for this project.
+is out of scope for this project. Installation lives in shell scripts instead:
+
+- `install.sh` — builds and installs the binary as `tetris`. Defaults to
+  `/usr/local/bin` (using sudo only when that is not writable), `--user` for
+  `~/.local/bin`, `--prefix DIR`, `--uninstall`.
+- `build-deb.sh` — produces `dist/terminal-tetris_<version>_<arch>.deb`, which
+  installs to `/usr/bin` for every user and declares `libncurses6`.
+- `packaging/tetris.6` — the man page, shipped by the `.deb`.
+
+**Do not add `-std=c99` to any build command.** `now_ms()` calls
+`clock_gettime()` and uses `struct timespec`, which glibc only declares when
+the POSIX feature macros are in scope. Under strict ISO C99 the build fails
+outright. The correct flags are `-O2 -Wall -Wextra`, which stay warning-clean.
+
+Both scripts build into a temp dir and never write into the repo, and both
+leave the score file alone — uninstalling does not lose anyone's high scores.
 
 **Note on linking:** the plain `-lncurses` form is correct once
 `libncurses-dev` is installed. If you are building against headers extracted

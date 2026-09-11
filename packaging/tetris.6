@@ -1,0 +1,107 @@
+.TH TETRIS 6 "2026" "terminal-tetris" "Games"
+.SH NAME
+tetris \- a Tetris game for the terminal
+.SH SYNOPSIS
+.B tetris
+.SH DESCRIPTION
+.B tetris
+is a complete Tetris game that runs in a terminal, written in C against
+ncurses.
+.PP
+It opens on a menu where you pick a game mode and an action, then plays in a
+full\(hyscreen view showing the falling piece, a ghost marking where a hard
+drop would land, a next\(hypiece preview, and the live score, level and line
+counters.
+.PP
+Your terminal must be at least 50 columns by 22 rows. Smaller terminals show a
+notice instead of a broken screen, and the layout recentres itself whenever you
+resize.
+.SH CONTROLS
+.SS In the menu
+.TP
+.B Up / Down
+Move between actions.
+.TP
+.B Left / Right
+Switch game mode.
+.TP
+.B Enter
+Confirm the highlighted action.
+.TP
+.B Q
+Quit.
+.SS In a game
+.TP
+.B Left / Right
+Move the piece sideways.
+.TP
+.B Up
+Rotate clockwise.
+.TP
+.B Down
+Soft drop, worth one point per cell.
+.TP
+.B Space
+Hard drop, worth two points per cell.
+.TP
+.B P
+Pause or resume.
+.TP
+.B M
+Return to the main menu, abandoning the current run.
+.TP
+.B Q
+Quit to the shell.
+.SS When a run ends
+.TP
+.B R
+Play again in the same mode.
+.TP
+.B M
+Back to the main menu.
+.TP
+.B Q
+Quit.
+.SS Entering your initials
+If a score reaches the top ten you are prompted for three initials.
+Letters and digits are accepted; Backspace deletes; Enter saves; Esc skips the
+prompt without saving.
+.SH MODES
+.TP
+.B Marathon
+Endless. Survive and score. Ranked by score.
+.TP
+.B Sprint
+Clear 40 lines as fast as you can. Ranked by time, fastest first. A time is
+recorded only if all 40 lines are actually cleared.
+.TP
+.B Ultra
+Two minutes on the clock. Score as much as you can. Ranked by score.
+.TP
+.B Expert
+Endless, but starting at level 10, so gravity opens at 170 ms per step rather
+than 800 ms. Ranked by score.
+.PP
+Gravity ramps from 800 ms per step down to a floor of 80 ms, and the level
+rises every 10 lines. Any mode with an objective swaps the level readout for a
+clock: counting up in Sprint, down in Ultra.
+.SH FILES
+.TP
+.I $XDG_DATA_HOME/terminal-tetris/scores
+Persistent high scores, one entry per line, kept per mode. Falls back to
+.IR ~/.local/share/terminal-tetris/scores
+when
+.B XDG_DATA_HOME
+is unset. The directory is created on demand; if it cannot be written the game
+still plays, it just does not remember scores.
+.SH DIAGNOSTICS
+Nothing is printed to the terminal outside the curses screen, so
+.B tetris
+is safe to launch with its output redirected. Errors writing the score file are
+deliberately swallowed so a bad score table can never stop the game from being
+playable.
+.SH SEE ALSO
+Full documentation in
+.IR /usr/share/doc/terminal-tetris/README.md .
+.SH AUTHOR
+Written by suoim, and released under the MIT license.

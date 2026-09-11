@@ -19,5 +19,8 @@ __pycache__/
 *.dSYM/
 core
 
+# .deb output from build-deb.sh
+dist/
+
 # Local session export / scratch notes -- never commit these
 tetris.txt

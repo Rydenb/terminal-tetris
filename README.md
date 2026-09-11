@@ -68,9 +68,62 @@ lands, the next-piece preview, and the live counters:
 That lone `[]` a few rows above the stack is the **ghost** — it marks where the
 piece lands if you hit Space. It renders dimmed in a real terminal.
 
+## Install
+
+All three routes end the same way: `tetris` works from any directory.
+
+### From a release
+
+Download the `.deb` from the
+[latest release](https://github.com/aacanadaa/terminal-tetris/releases/latest)
+and install it. The glob saves you typing the version:
+
+```sh
+sudo apt install ./terminal-tetris_*_amd64.deb
+```
+
+That is the one to hand to somebody else. It puts `tetris` in `/usr/bin` for
+every user on the machine, pulls in `libncurses6` automatically, and installs a
+man page, so `man tetris` works. Remove it with
+`sudo apt remove terminal-tetris`.
+
+### From a clone, on this machine
+
+```sh
+./install.sh
+```
+
+That builds the game and installs it to `/usr/local/bin/tetris`, asking for
+sudo only if that directory is not writable by you. To keep it out of the
+system entirely:
+
+```sh
+./install.sh --user     # installs to ~/.local/bin, never uses sudo
+```
+
+The installer checks for a compiler and the ncurses headers before it starts,
+and prints the exact `apt` line if either is missing. Either form is undone
+with:
+
+```sh
+./install.sh --uninstall
+```
+
+### Building the package yourself
+
+```sh
+./build-deb.sh              # -> dist/terminal-tetris_<version>_<arch>.deb
+sudo apt install ./dist/terminal-tetris_*_amd64.deb
+```
+
+None of this touches your high scores — those live in `$XDG_DATA_HOME` and
+survive both install and uninstall. None of it is a Makefile, either: this
+project deliberately does not have one.
+
 ## Requirements
 
-Ubuntu / Debian, and the ncurses development headers:
+Only needed to build from source — the installers handle the rest. Ubuntu /
+Debian, and the ncurses development headers:
 
 ```sh
 sudo apt update && sudo apt install -y build-essential libncurses-dev
@@ -255,6 +308,9 @@ one-line Sprint goal. Same code path, different numbers.
 
 ```
 tetris.c      the entire game
+install.sh    build and install it as `tetris`
+build-deb.sh  package it as a .deb
+packaging/    the man page
 LICENSE       the MIT license
 tests/        pty test suite and its runner
 CLAUDE.md     project memory and conventions
