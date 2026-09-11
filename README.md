@@ -229,11 +229,34 @@ Soft dropping adds 1 point per cell; hard dropping adds 2.
   independent of your keypresses
 - The terminal is always restored on exit, including on Ctrl-C
 
+## Testing
+
+The game is a full-screen TUI, so it can't be exercised in a plain shell — it
+needs a pty. `tests/run_tests.sh` sets one up, builds the game, and runs three
+suites against it:
+
+```sh
+tests/run_tests.sh
+```
+
+It covers all four mode HUDs, drop scoring, pause, the terminal-size gate,
+score-file parsing, and both end conditions end-to-end (Ultra timing out to
+`TIME UP`, Sprint reaching `CLEARED` with a time on the board). Everything it
+builds goes to `$TETRIS_WORK` (default `/tmp/terminal-tetris-test`), so your
+working tree is left alone — the run finishes by verifying that.
+
+Needs `python3` with `venv`. `pyte` is installed into a venv for you.
+
+The end conditions that would otherwise take minutes to reach are exercised via
+variants built on the fly with a shortened constant — a 3-second Ultra clock, a
+one-line Sprint goal. Same code path, different numbers.
+
 ## Layout
 
 ```
 tetris.c      the entire game
 LICENSE       the MIT license
+tests/        pty test suite and its runner
 CLAUDE.md     project memory and conventions
 README.md     this file
 ```

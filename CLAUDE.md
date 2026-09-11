@@ -165,8 +165,16 @@ Compiles clean with `-Wall -Wextra`. Please keep it that way:
 gcc -Wall -Wextra tetris.c -o tetris -lncurses
 ```
 
-There is no automated test suite. The game is a full-screen TUI, so it cannot be
-run in a plain shell — it needs a pty. The pattern that works:
+`tests/run_tests.sh` builds the game, generates the variants described below,
+and runs the three suites against it — 38 checks covering the four mode HUDs,
+scoring, pause, size gating, score-file parsing, and both end conditions
+end-to-end. Build artifacts, the venv and the score tables all go to
+`$TETRIS_WORK` (default `/tmp/terminal-tetris-test`), so the runner never writes
+into the repo. It finishes by asserting `tetris.c` is unchanged from HEAD and
+that the constants the variants shorten still hold their shipped values.
+
+The game is a full-screen TUI, so it cannot be run in a plain shell — it needs a
+pty. The pattern that works:
 
 - Allocate a pty (`pty.fork()` in Python), set the window size with
   `TIOCSWINSZ`, and drive it with real key sequences from `curses.tigetstr`
