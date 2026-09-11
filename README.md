@@ -6,6 +6,7 @@
 
 <p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://github.com/aacanadaa/terminal-tetris/actions/workflows/ci.yml"><img src="https://github.com/aacanadaa/terminal-tetris/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="tetris.c"><img src="https://img.shields.io/badge/C-C99-00599C.svg?logo=c&logoColor=white" alt="Written in C99"></a>
   <img src="https://img.shields.io/badge/TUI-ncurses-3A7D44.svg?logo=gnu&logoColor=white" alt="Runs on ncurses">
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20BSD-2C2D72.svg" alt="Platform: Linux, macOS and BSD">
