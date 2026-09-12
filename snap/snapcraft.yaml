@@ -60,6 +60,7 @@ license: PolyForm-Noncommercial-1.0.0
 contact: https://github.com/aacanadaa/terminal-tetris/issues
 issues: https://github.com/aacanadaa/terminal-tetris/issues
 source-code: https://github.com/aacanadaa/terminal-tetris
+website: https://github.com/aacanadaa/terminal-tetris
 
 # Strict confinement with no plugs at all, which is not an oversight. The game
 # never reads a user file: its only write is the high score table, and it looks
@@ -70,7 +71,8 @@ source-code: https://github.com/aacanadaa/terminal-tetris
 # to buy nothing.
 #
 # So the score table lives at
-#   ~/snap/terminal-tetris/current/.local/share/terminal-tetris/scores
+#   ~/snap/tetrisplus/current/.local/share/terminal-tetris/scores
+# (the trailing directory is still the game's own name, not the snap's)
 # and is separate from the .deb and install.sh builds. Sharing one file would
 # need the `personal-files` interface, which the store grants by hand review.
 confinement: strict
@@ -113,6 +115,15 @@ parts:
     # build-deb.sh is worth more than trimming ~190 KB.
     stage-packages:
       - libncurses6
+
+    # libncurses6 drags in the form, menu and panel libraries, which this game
+    # never calls -- the library linter flags all three as unused. The glob
+    # keeps the triplet out of it, so an arm64 build prunes the same files
+    # rather than silently missing an x86_64-only path.
+    prime:
+      - -usr/lib/*/libform.so.*
+      - -usr/lib/*/libmenu.so.*
+      - -usr/lib/*/libpanel.so.*
 
     override-build: |
       set -eu
