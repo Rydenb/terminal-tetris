@@ -27,7 +27,7 @@ OUT_DIR=$SRC_DIR/dist
 
 # The default release version. Bump this when cutting a release; it should
 # match the git tag, because the .deb version and the tag are the same number.
-version=${1:-1.1.1}
+version=${1:-1.2.0}
 arch=$(dpkg --print-architecture)
 
 # As in install.sh: no -std=c99, because tetris.c needs clock_gettime and
