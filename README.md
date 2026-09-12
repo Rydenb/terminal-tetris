@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/TUI-ncurses-3A7D44.svg?logo=gnu&logoColor=white" alt="Runs on ncurses">
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20BSD-2C2D72.svg" alt="Platform: Linux, macOS and BSD">
   <img src="https://img.shields.io/badge/packaging-.deb-A80030.svg?logo=debian&logoColor=white" alt="Ships a Debian package">
+  <a href="https://snapcraft.io/tetrisplus"><img src="https://img.shields.io/badge/snap-tetrisplus-82BEA0.svg?logo=snapcraft&logoColor=white" alt="Available as a snap"></a>
 </p>
 
 </div>
@@ -72,7 +73,27 @@ piece lands if you hit Space. It renders dimmed in a real terminal.
 
 ## Install
 
-All three routes end the same way: `tetris` works from any directory.
+Every route ends the same way: you can run the game from any directory. The
+snap is the one that breaks the naming, installing as `tetrisplus` rather than
+`tetris`, for the reason given below.
+
+### From the Snap Store
+
+```sh
+sudo snap install tetrisplus
+```
+
+Works on any Linux with snapd rather than just the Debian family, and updates
+itself. Two differences are worth knowing up front.
+
+The command is **`tetrisplus`**, not `tetris`. Snap names are globally unique
+and `terminal-tetris` was already taken, so the registered name carries the
+`plus`. A `tetris` alias would need to be granted by the store by hand, so it
+is not there by default.
+
+The snap also keeps **its own high score table**, because strict confinement
+hides the rest of the filesystem from it. See
+[High scores](#high-scores) for where that lands and how to remove it.
 
 ### From a release
 
@@ -120,11 +141,12 @@ looks in the wrong place and finds nothing:
 
 | How you installed it                        | How to undo it                    |
 | ------------------------------------------- | --------------------------------- |
+| `sudo snap install tetrisplus`              | `sudo snap remove tetrisplus`     |
 | `sudo apt install ./terminal-tetris_*.deb`  | `sudo apt remove terminal-tetris` |
 | `./install.sh` (system-wide)                | `./install.sh --uninstall`        |
 | `./install.sh --user`                       | `./install.sh --user --uninstall` |
 
-The two script forms need the clone to still be on disk. If you have since
+The two `install.sh` forms need the clone to still be on disk. If you have since
 deleted it, the install is only a single file:
 
 ```sh
@@ -133,10 +155,15 @@ sudo rm /usr/local/bin/tetris    # system-wide install
 ```
 
 **Your high scores are not part of the install**, so none of the above removes
-them — they live outside the repo and survive a reinstall. To wipe those too:
+them — they live outside the repo and survive a reinstall. The snap belongs to
+that exception too: `snap remove` does take its table along, because the table
+lives inside the snap's own data directory, not yours.
+
+To wipe the rest:
 
 ```sh
-rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/terminal-tetris"
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/terminal-tetris"   # .deb and install.sh
+rm -rf ~/snap/tetrisplus/current/.local/share/terminal-tetris   # snap, if you want it gone separately
 ```
 
 And none of it is a Makefile: this project deliberately does not have one.
@@ -263,6 +290,15 @@ $XDG_DATA_HOME/terminal-tetris/scores
 ~/.local/share/terminal-tetris/scores
 ```
 
+The snap is the exception. Strict confinement hides your home directory from
+it, so it keeps a table of its own inside its sandbox, and the two never see
+each other — a score set under the snap will not show up in a `.deb` install,
+or the other way round:
+
+```
+~/snap/tetrisplus/current/.local/share/terminal-tetris/scores
+```
+
 The file is plain text so you can read or back it up easily:
 
 ```
@@ -342,6 +378,7 @@ one-line Sprint goal. Same code path, different numbers.
 tetris.c      the entire game
 install.sh    build and install it as `tetris`
 build-deb.sh  package it as a .deb
+snap/         package it as a snap
 packaging/    the man page
 LICENSE       the PolyForm Noncommercial license
 tests/        pty test suite and its runner

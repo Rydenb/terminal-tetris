@@ -51,6 +51,10 @@ is out of scope for this project. Installation lives in shell scripts instead:
 - `build-deb.sh` — produces `dist/terminal-tetris_<version>_<arch>.deb`, which
   installs to `/usr/bin` for every user and declares `libncurses6`.
 - `packaging/tetris.6` — the man page, shipped by the `.deb`.
+- `snap/snapcraft.yaml` — packages the same source as the snap **`tetrisplus`**,
+  published on the Snap Store. The compile lives in the part's `override-build`
+  rather than in a Makefile, for the same reason the rest of this list exists.
+  See *Snap packaging* below before touching it.
 
 **Do not add `-std=c99` to any build command.** `now_ms()` calls
 `clock_gettime()` and uses `struct timespec`, which glibc only declares when
@@ -77,6 +81,43 @@ gcc tetris.c -o tetris -Iroot/usr/include -L<dir-with-libncurses.so> \
 
 The runtime `libncurses.so.6` is usually already present; only the headers and
 the `.so` dev symlink are missing.
+
+### Snap packaging
+
+Build it with **`snapcraft pack --destructive-mode`**, not a bare
+`snapcraft pack`. The plain form wants LXD, and this machine runs Docker, which
+sets the iptables `FORWARD` policy to `DROP` and cuts egress from `lxdbr0` —
+the build then dies with `Timed out waiting for networking to be ready`. The
+host is Ubuntu 26.04, exactly what `core26` is built from, so destructive mode
+is a faithful build. `sudo snap install core26` has to happen first: craft-parts
+skips a base that is already present, but runs `snap install` as your user, with
+no sudo, when it is missing.
+
+Three things about the snap are load-bearing and easy to break:
+
+- **The name is `tetrisplus`, and it is permanent.** `terminal-tetris` was
+  already published by a different project, and a registered snap name can
+  never be changed. `tetris+` is not a legal name either — lowercase
+  alphanumerics and hyphens only — which is why the `+` lives in the `title`.
+  The app key must match the name, or the command stops landing on `PATH`.
+- **`libncurses6` is staged on purpose.** core26 ships only the wide
+  `libncursesw.so.6`. `tetris.c` draws with `ACS_*` and plain `mvaddstr` and
+  never calls `setlocale()`, so it links the narrow library the base does not
+  carry. Remove that `stage-packages` entry and the snap builds fine, installs,
+  then dies at launch with `libncurses.so.6: cannot open shared object file`.
+- **`snap/term-fallback` is not optional.** ncurses reads terminfo only from
+  the base, which carries 71 entries and no kitty, alacritty or foot among
+  them, so `initscr()` aborts with `cannot initialize terminal type`. The
+  wrapper degrades `TERM` to `xterm-256color` only when the entry is missing.
+  Shipping a terminfo database does not fix this: `xterm-kitty` is not in
+  `ncurses-term` at all.
+
+The version is adopted from `build-deb.sh` rather than repeated, so the file
+still holds exactly one copy. Confinement is `strict` with **no plugs**: the
+game's only write is the score table, and snapd already points `XDG_DATA_HOME`
+inside the sandbox. The consequence is that the snap's scores are separate from
+every other install's, and no interface can share them without a hand-reviewed
+`personal-files` grant.
 
 ## Run
 
@@ -296,6 +337,31 @@ gh release create v<v> --title "terminal-tetris v<v>" \
 Verify the upload rather than trusting it: download the asset back and `cmp` it
 against the local build. `gh release create` marks the newest non-prerelease as
 Latest automatically, so there is no need to touch the older one.
+
+The snap is released separately, and takes the same version out of the same
+file — nothing to bump here:
+
+```sh
+snapcraft pack --destructive-mode
+snapcraft upload --release=edge tetrisplus_<v>_amd64.snap
+sudo snap refresh tetrisplus --edge && tetrisplus   # check it actually runs
+snapcraft release tetrisplus <revision> stable
+```
+
+Revisions are numbered by the store, not by us, and they are **not** the
+version: uploading the same `<v>` twice produces revisions 1 and 2. Get the
+number from the upload output or `snapcraft status tetrisplus`.
+
+Store metadata — including `license:` — is read from the snap's own
+`meta/snap.yaml`, so a metadata change only reaches the listing when a new
+revision is uploaded and released. Editing `snapcraft.yaml` alone changes
+nothing that anyone browsing the store can see.
+
+**Never edit a published revision to "correct" history.** Snap revision 2 says
+`license: MIT` because it *was* MIT, and the GitHub releases up to `v1.1.1`
+ship an MIT `LICENSE` for the same reason. Those grants cannot be withdrawn.
+PolyForm applies to the repository from here on, and to the store from snap
+revision 3 onward.
 
 **Never retag, move or delete a published tag** — cut a new version instead.
 `v1.0.0` is permanently at `470d71c`, which predates the pty test suite, and
