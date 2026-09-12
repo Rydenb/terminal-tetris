@@ -334,9 +334,8 @@ gh release create v<v> --title "terminal-tetris v<v>" \
     --notes-file <notes> dist/terminal-tetris_<v>_<arch>.deb tetris.c
 ```
 
-Verify the upload rather than trusting it: download the asset back and `cmp` it
-against the local build. `gh release create` marks the newest non-prerelease as
-Latest automatically, so there is no need to touch the older one.
+`gh release create` marks the newest non-prerelease as Latest automatically, so
+there is no need to touch the older one.
 
 The snap is released separately, and takes the same version out of the same
 file — nothing to bump here:
