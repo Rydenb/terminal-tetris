@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# command-chain wrapper for the snap.
+#
+# ncurses can only read terminfo from the base snap's /usr/share/terminfo, and
+# that carries just the common entries -- xterm and friends. It has no entry
+# for the terminals people actually run today: kitty's xterm-kitty, alacritty,
+# foot, wezterm. When the entry is missing, initscr() does not degrade, it
+# aborts, and the game never draws:
+#
+#   ncurses: cannot initialize terminal type ($TERM="xterm-kitty"); exiting
+#
+# Shipping a terminfo database inside the snap does not close this, because the
+# entry for kitty lives in the kitty package rather than in ncurses-term, and
+# the next new terminal would be missing from it too. So rather than chase
+# entries, fall back to a type the base is guaranteed to have. tetris.c draws
+# only ACS box characters, plain ASCII and the eight basic colours, so
+# xterm-256color costs it nothing.
+#
+# TERM is left alone whenever its entry does resolve, so a terminal that is
+# fully described keeps its own description.
+
+set -eu
+
+# An unset TERM makes ncurses abort just as hard as an unknown one does.
+TERM=${TERM:-xterm-256color}
+
+# First character of $TERM is the subdirectory terminfo files are filed under.
+first=${TERM%"${TERM#?}"}
+
+if [ ! -e "/usr/share/terminfo/$first/$TERM" ] &&
+   [ ! -e "/lib/terminfo/$first/$TERM" ]; then
+    TERM=xterm-256color
+fi
+export TERM
+
+exec "$@"

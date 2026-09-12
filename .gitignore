@@ -22,5 +22,13 @@ core
 # .deb output from build-deb.sh
 dist/
 
+# Snapcraft output from `snapcraft pack` (driven by snap/snapcraft.yaml).
+# It builds in the project root, so these land next to the source.
+parts/
+stage/
+prime/
+.craft/
+*.snap
+
 # Local session export / scratch notes -- never commit these
 tetris.txt

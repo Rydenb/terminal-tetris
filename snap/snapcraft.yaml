@@ -1,0 +1,149 @@
+# Snap packaging for terminal-tetris.
+#
+# Build with:   snapcraft pack          (from the repository root)
+# Try it with:  sudo snap install --dangerous tetrisplus_*.snap
+#
+# Before publishing to the store the name has to be registered once, and a snap
+# name can never be changed afterwards:
+#   snapcraft register tetrisplus
+#
+# Not `terminal-tetris`: that is already published by someone else, as a
+# different terminal Tetris. Not `tetris+` either, which the schema rejects
+# outright, since a snap name may only contain lowercase alphanumerics and
+# hyphens. The `+` lives in the title below instead, which is the string the
+# store actually displays.
+#
+# The build itself lives in the part below rather than in a Makefile, because
+# this project deliberately has no build system (see CLAUDE.md). The snap must
+# not become the reason one appears.
+
+name: tetrisplus
+base: core26
+adopt-info: tetris
+title: "Tetris+"
+
+# Kept under 79 characters; the store rejects anything longer. Quoted because a
+# bare colon inside a YAML scalar ends the key.
+summary: "Tetris for the terminal: four modes, each with its own leaderboard"
+
+description: |
+  Four Tetris modes in your terminal, each one keeping its own persistent
+  arcade leaderboard.
+
+  **Modes**
+
+  * **Marathon** -- endless. Survive and score.
+  * **Sprint** -- clear 40 lines as fast as you can, and it is ranked by time
+    rather than by score.
+  * **Ultra** -- two minutes on the clock. Score as much as you can.
+  * **Expert** -- endless, but starts at level 10, with gravity already open at
+    170 ms per step instead of 800.
+
+  **A leaderboard per mode**
+
+  Every mode keeps its own top-10 table, so a Sprint record can never be
+  unseated by a Marathon score. Time-ranked boards show a TIME column where the
+  others show SCORE. Entries take three-letter initials, arcade style, and
+  survive between sessions. A Sprint time is only recorded if you actually clear
+  all 40 lines -- bailing out at 30 does not post an unbeatable short time.
+
+  Also included: a ghost piece marking where a hard drop will land, a
+  next-piece preview, pause, and a menu you can drop back to mid-game.
+
+  Single file C, no build system, and no dependencies beyond libncurses. Built
+  for a terminal of at least 50x22; anything smaller gets a polite "terminal too
+  small" notice instead of a screen full of garbage.
+
+license: MIT
+contact: https://github.com/aacanadaa/terminal-tetris/issues
+issues: https://github.com/aacanadaa/terminal-tetris/issues
+source-code: https://github.com/aacanadaa/terminal-tetris
+
+# Strict confinement with no plugs at all, which is not an oversight. The game
+# never reads a user file: its only write is the high score table, and it looks
+# for that under $XDG_DATA_HOME first and $HOME/.local/share second. snapd
+# points both inside the sandbox -- it rewrites XDG_DATA_HOME to
+# $SNAP_USER_DATA/.local/share -- so the table lands somewhere writable with no
+# help from us. Adding `home` would hand out access to the real home directory
+# to buy nothing.
+#
+# So the score table lives at
+#   ~/snap/terminal-tetris/current/.local/share/terminal-tetris/scores
+# and is separate from the .deb and install.sh builds. Sharing one file would
+# need the `personal-files` interface, which the store grants by hand review.
+confinement: strict
+grade: stable
+
+apps:
+  tetrisplus:
+    command: bin/tetris
+    # Runs before the game and fixes up TERM when the base snap has no terminfo
+    # entry for it. See snap/term-fallback for the full story -- without this
+    # the game aborts on launch under kitty, alacritty, foot and friends.
+    command-chain:
+      - bin/term-fallback
+    # The app name has to match the snap name for a bare command to land on
+    # PATH; anything else is only reachable as <snap>.<app>. Naming the app
+    # `tetrisplus` is what puts that command on PATH.
+    #
+    # `tetris` is the name the README tells everyone to type. Declaring it is
+    # only the request -- the store grants aliases by hand, so this does nothing
+    # on its own. Until it is granted:
+    #   snap alias tetrisplus.tetris tetris
+    aliases:
+      - tetris
+
+parts:
+  tetris:
+    plugin: nil
+    source: .
+    build-packages:
+      - gcc
+      - libncurses-dev
+
+    # core26 ships only the wide ncurses (libncursesw.so.6). The game draws with
+    # ACS_* and plain mvaddstr and never calls setlocale(), so it links the
+    # narrow library, which the base does not carry. Without this the snap
+    # builds fine and then dies on launch with:
+    #   error while loading shared libraries: libncurses.so.6
+    # libtinfo6 comes along as a dependency and duplicates the base's copy.
+    # Harmless, and keeping the link line identical to install.sh and
+    # build-deb.sh is worth more than trimming ~190 KB.
+    stage-packages:
+      - libncurses6
+
+    override-build: |
+      set -eu
+
+      # Snapcraft creates $CRAFT_PART_INSTALL but not the bin/ inside it, and
+      # gcc will not create an output directory for you.
+      mkdir -p "$CRAFT_PART_INSTALL/bin"
+
+      # Same flags as install.sh and build-deb.sh, and for the same reason:
+      # -std=c99 must NOT be added, because tetris.c calls clock_gettime() and
+      # uses struct timespec, which glibc only declares when the POSIX feature
+      # macros are in scope. CI is what compiles with -Werror.
+      gcc -O2 -Wall -Wextra -o "$CRAFT_PART_INSTALL/bin/tetris" \
+          "$CRAFT_PART_SRC/tetris.c" -lncurses
+
+      # The command-chain wrapper. It ships as a file beside this one rather
+      # than as a heredoc in here, because the shebang has to sit in column one
+      # and a YAML block scalar cannot put it there without a sed pass to undo
+      # the indentation.
+      install -D -m 0755 "$CRAFT_PART_SRC/snap/term-fallback" \
+          "$CRAFT_PART_INSTALL/bin/term-fallback"
+
+      # CLAUDE.md says the version lives in exactly one place, so read it back
+      # out of build-deb.sh instead of repeating the number here where it would
+      # quietly go stale. If the line ever moves, fail loudly rather than ship a
+      # snap labelled with a guess.
+      version=$(sed -n 's/^version=\${1:-\(.*\)}$/\1/p' "$CRAFT_PART_SRC/build-deb.sh")
+      if [ -z "$version" ]; then
+          echo "snapcraft: cannot read the version from build-deb.sh" >&2
+          exit 1
+      fi
+      craftctl set version="$version"
+
+      # The man page is deliberately not staged. Nothing adds a snap's
+      # share/man to the host's MANPATH, so `man tetris` would not find it
+      # anyway -- it would be dead weight in the package. The .deb ships it.
