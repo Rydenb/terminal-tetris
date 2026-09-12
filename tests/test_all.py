@@ -10,7 +10,7 @@ import sys
 
 from harness import Harness
 
-WORK = os.environ.get("TETRIS_WORK", "/tmp/terminal-tetris-test")
+WORK = os.environ.get("TETRIS_WORK", "/tmp/tetrisplus-test")
 BIN = os.path.join(WORK, "tetris")
 DATA = os.path.join(WORK, "data")
 fails = []
@@ -140,7 +140,7 @@ h.close()
 
 # ---- corrupted score file ---------------------------------------------------
 fresh()
-d = os.path.join(DATA, "terminal-tetris")
+d = os.path.join(DATA, "tetrisplus")
 os.makedirs(d, exist_ok=True)
 with open(os.path.join(d, "scores"), "w") as f:
     f.write("# junk below\n")

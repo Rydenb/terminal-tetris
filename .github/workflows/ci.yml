@@ -67,20 +67,20 @@ jobs:
       - name: install.sh installs and uninstalls
         run: |
           ./install.sh --user
-          test -x "$HOME/.local/bin/tetris"
+          test -x "$HOME/.local/bin/tetrisplus"
           export PATH="$HOME/.local/bin:$PATH"
-          command -v tetris
+          command -v tetrisplus
           ./install.sh --user --uninstall
-          test ! -e "$HOME/.local/bin/tetris"
+          test ! -e "$HOME/.local/bin/tetrisplus"
 
       - name: build-deb.sh produces a valid package
         run: |
           ./build-deb.sh
-          dpkg-deb --info dist/terminal-tetris_*_amd64.deb
-          dpkg-deb --contents dist/terminal-tetris_*_amd64.deb
+          dpkg-deb --info dist/tetrisplus_*_amd64.deb
+          dpkg-deb --contents dist/tetrisplus_*_amd64.deb
 
       - name: the packaged binary and man page are real
         run: |
-          dpkg-deb -x dist/terminal-tetris_*_amd64.deb /tmp/deb
-          file /tmp/deb/usr/bin/tetris | grep -q ELF
-          test -s /tmp/deb/usr/share/man/man6/tetris.6.gz
+          dpkg-deb -x dist/tetrisplus_*_amd64.deb /tmp/deb
+          file /tmp/deb/usr/bin/tetrisplus | grep -q ELF
+          test -s /tmp/deb/usr/share/man/man6/tetrisplus.6.gz

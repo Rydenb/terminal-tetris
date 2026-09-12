@@ -1,24 +1,24 @@
 #!/bin/sh
 #
-# build-deb.sh -- package terminal-tetris as a Debian/Ubuntu .deb
+# build-deb.sh -- package tetrisplus as a Debian/Ubuntu .deb
 #
-#   ./build-deb.sh              -> dist/terminal-tetris_<version>_<arch>.deb
+#   ./build-deb.sh              -> dist/tetrisplus_<version>_<arch>.deb
 #   ./build-deb.sh 1.2.0        -> build that version instead
 #
 # Anyone on Ubuntu or Debian can then install it system-wide with:
 #
-#   sudo apt install ./dist/terminal-tetris_<version>_<arch>.deb
+#   sudo apt install ./dist/tetrisplus_<version>_<arch>.deb
 #
-# ...which puts `tetris` in /usr/bin and pulls in libncurses6 as a dependency.
+# ...which puts `tetrisplus` in /usr/bin and pulls in libncurses6 as a dependency.
 #
 # Like install.sh, this exists because the project has no Makefile on purpose
 # (see CLAUDE.md).
 
 set -eu
 
-PROG=tetris
-PKG=terminal-tetris
-HOMEPAGE='https://github.com/aacanadaa/terminal-tetris'
+PROG=tetrisplus
+PKG=tetrisplus
+HOMEPAGE='https://github.com/aacanadaa/tetrisplus'
 MAINTAINER='suoim <suoim@users.noreply.github.com>'
 
 SRC_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Build terminal-tetris and drive it through a pty.
+# Build tetrisplus and drive it through a pty.
 #
 #   tests/run_tests.sh
 #
 # Idempotent and re-runnable. Build artifacts, the venv and the score tables
-# all go to a scratch directory (TETRIS_WORK, default /tmp/terminal-tetris-test)
+# all go to a scratch directory (TETRIS_WORK, default /tmp/tetrisplus-test)
 # so nothing here writes into the repository.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="${1:-$HERE/../tetris.c}"
-WORK="${TETRIS_WORK:-/tmp/terminal-tetris-test}"
+WORK="${TETRIS_WORK:-/tmp/tetrisplus-test}"
 export TETRIS_WORK="$WORK"
 mkdir -p "$WORK"
 

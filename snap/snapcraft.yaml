@@ -1,4 +1,4 @@
-# Snap packaging for terminal-tetris.
+# Snap packaging for tetrisplus.
 #
 # Build with:   snapcraft pack          (from the repository root)
 # Try it with:  sudo snap install --dangerous tetrisplus_*.snap
@@ -57,10 +57,10 @@ description: |
 # An official SPDX identifier (list 3.9), though not OSI-approved: the game is
 # source-available and noncommercial, which is what PolyForm describes.
 license: PolyForm-Noncommercial-1.0.0
-contact: https://github.com/aacanadaa/terminal-tetris/issues
-issues: https://github.com/aacanadaa/terminal-tetris/issues
-source-code: https://github.com/aacanadaa/terminal-tetris
-website: https://github.com/aacanadaa/terminal-tetris
+contact: https://github.com/aacanadaa/tetrisplus/issues
+issues: https://github.com/aacanadaa/tetrisplus/issues
+source-code: https://github.com/aacanadaa/tetrisplus
+website: https://github.com/aacanadaa/tetrisplus
 
 # Strict confinement with no plugs at all, which is not an oversight. The game
 # never reads a user file: its only write is the high score table, and it looks
@@ -71,8 +71,7 @@ website: https://github.com/aacanadaa/terminal-tetris
 # to buy nothing.
 #
 # So the score table lives at
-#   ~/snap/tetrisplus/current/.local/share/terminal-tetris/scores
-# (the trailing directory is still the game's own name, not the snap's)
+#   ~/snap/tetrisplus/current/.local/share/tetrisplus/scores
 # and is separate from the .deb and install.sh builds. Sharing one file would
 # need the `personal-files` interface, which the store grants by hand review.
 confinement: strict
@@ -80,7 +79,7 @@ grade: stable
 
 apps:
   tetrisplus:
-    command: bin/tetris
+    command: bin/tetrisplus
     # Runs before the game and fixes up TERM when the base snap has no terminfo
     # entry for it. See snap/term-fallback for the full story -- without this
     # the game aborts on launch under kitty, alacritty, foot and friends.
@@ -90,10 +89,11 @@ apps:
     # PATH; anything else is only reachable as <snap>.<app>. Naming the app
     # `tetrisplus` is what puts that command on PATH.
     #
-    # `tetris` is the name the README tells everyone to type. Declaring it is
-    # only the request -- the store grants aliases by hand, so this does nothing
-    # on its own. Until it is granted:
-    #   snap alias tetrisplus.tetris tetris
+    # Every channel now installs a `tetrisplus` command, so this alias is only
+    # a shorter convenience, not the documented name. Declaring it is just the
+    # request -- the store grants aliases by hand, so it does nothing on its
+    # own. Until it is granted:
+    #   snap alias tetrisplus.tetrisplus tetris
     aliases:
       - tetris
 
@@ -136,7 +136,7 @@ parts:
       # -std=c99 must NOT be added, because tetris.c calls clock_gettime() and
       # uses struct timespec, which glibc only declares when the POSIX feature
       # macros are in scope. CI is what compiles with -Werror.
-      gcc -O2 -Wall -Wextra -o "$CRAFT_PART_INSTALL/bin/tetris" \
+      gcc -O2 -Wall -Wextra -o "$CRAFT_PART_INSTALL/bin/tetrisplus" \
           "$CRAFT_PART_SRC/tetris.c" -lncurses
 
       # The command-chain wrapper. It ships as a file beside this one rather
@@ -158,5 +158,5 @@ parts:
       craftctl set version="$version"
 
       # The man page is deliberately not staged. Nothing adds a snap's
-      # share/man to the host's MANPATH, so `man tetris` would not find it
+      # share/man to the host's MANPATH, so `man tetrisplus` would not find it
       # anyway -- it would be dead weight in the package. The .deb ships it.

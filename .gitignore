@@ -1,4 +1,6 @@
 # Compiled game binary
+tetrisplus
+# ...and the name it had before the rename, so a stale build cannot sneak in.
 tetris
 
 # Object files and archives

@@ -1,18 +1,18 @@
 #!/bin/sh
 #
-# install.sh -- build terminal-tetris and put `tetris` on your PATH.
+# install.sh -- build tetrisplus and put `tetrisplus` on your PATH.
 #
 #   ./install.sh                install to /usr/local/bin (sudo if needed)
 #   ./install.sh --user         install to ~/.local/bin, never needs sudo
 #   ./install.sh --prefix DIR   install to DIR/bin
-#   ./install.sh --uninstall    remove an installed `tetris`
+#   ./install.sh --uninstall    remove an installed `tetrisplus`
 #
 # This project deliberately has no Makefile (see CLAUDE.md), so installation
 # lives here rather than in a `make install` target.
 
 set -eu
 
-PROG=tetris
+PROG=tetrisplus
 SRC_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SRC=$SRC_DIR/tetris.c
 

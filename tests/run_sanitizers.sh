@@ -12,7 +12,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="${1:-$HERE/../tetris.c}"
-WORK="${TETRIS_WORK:-/tmp/terminal-tetris-test}"
+WORK="${TETRIS_WORK:-/tmp/tetrisplus-test}"
 export TETRIS_WORK="$WORK"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }

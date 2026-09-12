@@ -1,12 +1,12 @@
 <div align="center">
 
-<h1>terminal-tetris</h1>
+<h1>tetrisplus</h1>
 
 <p><strong>A complete Tetris game for your terminal, written in C with ncurses.</strong></p>
 
 <p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-orange.svg" alt="License: PolyForm Noncommercial 1.0.0"></a>
-  <a href="https://github.com/aacanadaa/terminal-tetris/actions/workflows/ci.yml"><img src="https://github.com/aacanadaa/terminal-tetris/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/aacanadaa/tetrisplus/actions/workflows/ci.yml"><img src="https://github.com/aacanadaa/tetrisplus/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="tetris.c"><img src="https://img.shields.io/badge/C-C99-00599C.svg?logo=c&logoColor=white" alt="Written in C99"></a>
   <img src="https://img.shields.io/badge/TUI-ncurses-3A7D44.svg?logo=gnu&logoColor=white" alt="Runs on ncurses">
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20BSD-2C2D72.svg" alt="Platform: Linux, macOS and BSD">
@@ -73,9 +73,8 @@ piece lands if you hit Space. It renders dimmed in a real terminal.
 
 ## Install
 
-Every route ends the same way: you can run the game from any directory. The
-snap is the one that breaks the naming, installing as `tetrisplus` rather than
-`tetris`, for the reason given below.
+Every route ends the same way: a `tetrisplus` command that works from any
+directory.
 
 ### From the Snap Store
 
@@ -84,31 +83,32 @@ sudo snap install tetrisplus
 ```
 
 Works on any Linux with snapd rather than just the Debian family, and updates
-itself. Two differences are worth knowing up front.
+itself. Two things are worth knowing up front.
 
-The command is **`tetrisplus`**, not `tetris`. Snap names are globally unique
-and `terminal-tetris` was already taken, so the registered name carries the
-`plus`. A `tetris` alias would need to be granted by the store by hand, so it
-is not there by default.
+**The name comes from the store, not from the game.** Snap names are globally
+unique, and `terminal-tetris` was already registered there by an unrelated
+project, so this one carries the `plus`. The repository, the `.deb` and the
+command all follow it. A shorter `tetris` alias would have to be granted by the
+store by hand, so it is not there by default.
 
-The snap also keeps **its own high score table**, because strict confinement
-hides the rest of the filesystem from it. See
-[High scores](#high-scores) for where that lands and how to remove it.
+**The snap keeps its own high score table**, because strict confinement hides
+the rest of the filesystem from it. See [High scores](#high-scores) for where
+that lands and how to remove it.
 
 ### From a release
 
 Download the `.deb` from the
-[latest release](https://github.com/aacanadaa/terminal-tetris/releases/latest)
+[latest release](https://github.com/aacanadaa/tetrisplus/releases/latest)
 and install it. The glob saves you typing the version:
 
 ```sh
-sudo apt install ./terminal-tetris_*_amd64.deb
+sudo apt install ./tetrisplus_*_amd64.deb
 ```
 
-That is the one to hand to somebody else. It puts `tetris` in `/usr/bin` for
+That is the one to hand to somebody else. It puts `tetrisplus` in `/usr/bin` for
 every user on the machine, pulls in `libncurses6` automatically, and installs a
-man page, so `man tetris` works. Remove it with
-`sudo apt remove terminal-tetris`.
+man page, so `man tetrisplus` works. Remove it with
+`sudo apt remove tetrisplus`.
 
 ### From a clone, on this machine
 
@@ -116,7 +116,7 @@ man page, so `man tetris` works. Remove it with
 ./install.sh
 ```
 
-That builds the game and installs it to `/usr/local/bin/tetris`, asking for
+That builds the game and installs it to `/usr/local/bin/tetrisplus`, asking for
 sudo only if that directory is not writable by you. To keep it out of the
 system entirely:
 
@@ -130,8 +130,8 @@ and prints the exact `apt` line if either is missing.
 ### Building the package yourself
 
 ```sh
-./build-deb.sh              # -> dist/terminal-tetris_<version>_<arch>.deb
-sudo apt install ./dist/terminal-tetris_*_amd64.deb
+./build-deb.sh              # -> dist/tetrisplus_<version>_<arch>.deb
+sudo apt install ./dist/tetrisplus_*_amd64.deb
 ```
 
 ### Uninstall
@@ -142,7 +142,7 @@ looks in the wrong place and finds nothing:
 | How you installed it                        | How to undo it                    |
 | ------------------------------------------- | --------------------------------- |
 | `sudo snap install tetrisplus`              | `sudo snap remove tetrisplus`     |
-| `sudo apt install ./terminal-tetris_*.deb`  | `sudo apt remove terminal-tetris` |
+| `sudo apt install ./tetrisplus_*.deb`       | `sudo apt remove tetrisplus`      |
 | `./install.sh` (system-wide)                | `./install.sh --uninstall`        |
 | `./install.sh --user`                       | `./install.sh --user --uninstall` |
 
@@ -150,8 +150,8 @@ The two `install.sh` forms need the clone to still be on disk. If you have since
 deleted it, the install is only a single file:
 
 ```sh
-rm ~/.local/bin/tetris           # --user install
-sudo rm /usr/local/bin/tetris    # system-wide install
+rm ~/.local/bin/tetrisplus           # --user install
+sudo rm /usr/local/bin/tetrisplus    # system-wide install
 ```
 
 **Your high scores are not part of the install**, so none of the above removes
@@ -162,8 +162,8 @@ lives inside the snap's own data directory, not yours.
 To wipe the rest:
 
 ```sh
-rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/terminal-tetris"   # .deb and install.sh
-rm -rf ~/snap/tetrisplus/current/.local/share/terminal-tetris   # snap, if you want it gone separately
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/tetrisplus"   # .deb and install.sh
+rm -rf ~/snap/tetrisplus/current/.local/share/tetrisplus   # snap, if you want it gone separately
 ```
 
 And none of it is a Makefile: this project deliberately does not have one.
@@ -191,13 +191,13 @@ Then build it as shown below.
 ## Build
 
 ```sh
-gcc tetris.c -o tetris -lncurses
+gcc tetris.c -o tetrisplus -lncurses
 ```
 
 ## Run
 
 ```sh
-./tetris
+./tetrisplus
 ```
 
 Your terminal needs to be at least **50 columns x 22 rows**. Most default
@@ -285,9 +285,9 @@ behaviour from there. Each mode keeps its own high score table.
 Scores persist between sessions, in the standard location for application data:
 
 ```
-$XDG_DATA_HOME/terminal-tetris/scores
+$XDG_DATA_HOME/tetrisplus/scores
 # or, if XDG_DATA_HOME is unset:
-~/.local/share/terminal-tetris/scores
+~/.local/share/tetrisplus/scores
 ```
 
 The snap is the exception. Strict confinement hides your home directory from
@@ -296,13 +296,13 @@ each other — a score set under the snap will not show up in a `.deb` install,
 or the other way round:
 
 ```
-~/snap/tetrisplus/current/.local/share/terminal-tetris/scores
+~/snap/tetrisplus/current/.local/share/tetrisplus/scores
 ```
 
 The file is plain text so you can read or back it up easily:
 
 ```
-# terminal-tetris high scores
+# tetrisplus high scores
 # <mode> <initials> <score> <level> <lines> <date> [<elapsed_ms>]
 marathon SUO 12400 5 42 2026-09-09 0
 sprint BOT 13782 5 40 2026-09-09 13061
@@ -320,7 +320,7 @@ never inject terminal escape sequences into the UI.
 **To wipe your scores**, just delete the file:
 
 ```sh
-rm ~/.local/share/terminal-tetris/scores
+rm ~/.local/share/tetrisplus/scores
 ```
 
 If the file cannot be read or written for any reason, the game still plays —
@@ -363,7 +363,7 @@ tests/run_tests.sh
 It covers all four mode HUDs, drop scoring, pause, the terminal-size gate,
 score-file parsing, and both end conditions end-to-end (Ultra timing out to
 `TIME UP`, Sprint reaching `CLEARED` with a time on the board). Everything it
-builds goes to `$TETRIS_WORK` (default `/tmp/terminal-tetris-test`), so your
+builds goes to `$TETRIS_WORK` (default `/tmp/tetrisplus-test`), so your
 working tree is left alone — the run finishes by verifying that.
 
 Needs `python3` with `venv`. `pyte` is installed into a venv for you.
@@ -376,7 +376,7 @@ one-line Sprint goal. Same code path, different numbers.
 
 ```
 tetris.c      the entire game
-install.sh    build and install it as `tetris`
+install.sh    build and install it as `tetrisplus`
 build-deb.sh  package it as a .deb
 snap/         package it as a snap
 packaging/    the man page

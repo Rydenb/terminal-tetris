@@ -5,7 +5,7 @@ import sys
 
 from harness import Harness
 
-WORK = os.environ.get("TETRIS_WORK", "/tmp/terminal-tetris-test")
+WORK = os.environ.get("TETRIS_WORK", "/tmp/tetrisplus-test")
 BIN = os.path.join(WORK, "tetris-ultra-short")
 DATA = os.path.join(WORK, "data-ultra")
 fails = []
@@ -73,7 +73,7 @@ h.send("q", 1.0)
 h.close()
 
 # ---- did it land on disk? ---------------------------------------------------
-path = os.path.join(DATA, "terminal-tetris", "scores")
+path = os.path.join(DATA, "tetrisplus", "scores")
 check("score file was created", os.path.exists(path))
 body = open(path).read() if os.path.exists(path) else ""
 print("  -- score file --")

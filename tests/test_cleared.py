@@ -10,7 +10,7 @@ import sys
 
 from harness import Harness
 
-WORK = os.environ.get("TETRIS_WORK", "/tmp/terminal-tetris-test")
+WORK = os.environ.get("TETRIS_WORK", "/tmp/tetrisplus-test")
 BIN = os.path.join(WORK, "tetris-narrow")
 DATA = os.path.join(WORK, "data-narrow")
 fails = []
@@ -93,7 +93,7 @@ if rows1:
 rows2 = cleared_run("SLO", 1.6)
 check("a second (slower) run reaches CLEARED", rows2 is not None)
 
-path = os.path.join(DATA, "terminal-tetris", "scores")
+path = os.path.join(DATA, "tetrisplus", "scores")
 body = open(path).read() if os.path.exists(path) else ""
 print("  -- score file --")
 for line in body.splitlines():

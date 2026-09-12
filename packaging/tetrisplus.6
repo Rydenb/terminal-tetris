@@ -1,10 +1,10 @@
-.TH TETRIS 6 "2026" "terminal-tetris" "Games"
+.TH TETRISPLUS 6 "2026" "tetrisplus" "Games"
 .SH NAME
-tetris \- a Tetris game for the terminal
+tetrisplus \- a Tetris game for the terminal
 .SH SYNOPSIS
-.B tetris
+.B tetrisplus
 .SH DESCRIPTION
-.B tetris
+.B tetrisplus
 is a complete Tetris game that runs in a terminal, written in C against
 ncurses.
 .PP
@@ -87,21 +87,21 @@ rises every 10 lines. Any mode with an objective swaps the level readout for a
 clock: counting up in Sprint, down in Ultra.
 .SH FILES
 .TP
-.I $XDG_DATA_HOME/terminal-tetris/scores
+.I $XDG_DATA_HOME/tetrisplus/scores
 Persistent high scores, one entry per line, kept per mode. Falls back to
-.IR ~/.local/share/terminal-tetris/scores
+.IR ~/.local/share/tetrisplus/scores
 when
 .B XDG_DATA_HOME
 is unset. The directory is created on demand; if it cannot be written the game
 still plays, it just does not remember scores.
 .SH DIAGNOSTICS
 Nothing is printed to the terminal outside the curses screen, so
-.B tetris
+.B tetrisplus
 is safe to launch with its output redirected. Errors writing the score file are
 deliberately swallowed so a bad score table can never stop the game from being
 playable.
 .SH SEE ALSO
 Full documentation in
-.IR /usr/share/doc/terminal-tetris/README.md .
+.IR /usr/share/doc/tetrisplus/README.md .
 .SH AUTHOR
 Written by suoim, and released under the MIT license.

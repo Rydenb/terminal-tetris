@@ -1,4 +1,4 @@
-# CLAUDE.md — terminal-tetris
+# CLAUDE.md — tetrisplus
 
 Project memory for Claude Code. Read this before changing anything here.
 
@@ -15,7 +15,7 @@ score table.
 ## Build
 
 ```sh
-gcc tetris.c -o tetris -lncurses
+gcc tetris.c -o tetrisplus -lncurses
 ```
 
 System dependency (Ubuntu/Debian):
@@ -41,16 +41,16 @@ the only guard there is.
 There is no Makefile on purpose. If you find yourself wanting one, the change
 is out of scope for this project. Installation lives in shell scripts instead:
 
-- `install.sh` — builds and installs the binary as `tetris`. Defaults to
+- `install.sh` — builds and installs the binary as `tetrisplus`. Defaults to
   `/usr/local/bin` (using sudo only when that is not writable), `--user` for
   `~/.local/bin`, `--prefix DIR`, `--uninstall`. **`--uninstall` resolves the
   same prefix as install does**, so it only removes what the matching install
   put there — a `--user` install needs `--user --uninstall`, and a bare
   `--uninstall` will silently find nothing. It prints a hint when that happens,
   but the failure mode is "nothing happened", not an error.
-- `build-deb.sh` — produces `dist/terminal-tetris_<version>_<arch>.deb`, which
+- `build-deb.sh` — produces `dist/tetrisplus_<version>_<arch>.deb`, which
   installs to `/usr/bin` for every user and declares `libncurses6`.
-- `packaging/tetris.6` — the man page, shipped by the `.deb`.
+- `packaging/tetrisplus.6` — the man page, shipped by the `.deb`.
 - `snap/snapcraft.yaml` — packages the same source as the snap **`tetrisplus`**,
   published on the Snap Store. The compile lives in the part's `override-build`
   rather than in a Makefile, for the same reason the rest of this list exists.
@@ -75,7 +75,7 @@ into a userspace prefix (see *Building without root* below), you must also pass
 
 ```sh
 apt-get download libncurses-dev && dpkg -x libncurses-dev_*.deb root/
-gcc tetris.c -o tetris -Iroot/usr/include -L<dir-with-libncurses.so> \
+gcc tetris.c -o tetrisplus -Iroot/usr/include -L<dir-with-libncurses.so> \
     -lncurses -ltinfo
 ```
 
@@ -217,8 +217,8 @@ loop and independent gravity work.
 
 ### High scores
 
-Plain text at `$XDG_DATA_HOME/terminal-tetris/scores`, falling back to
-`~/.local/share/terminal-tetris/scores`. Directory is created `0700`; failures
+Plain text at `$XDG_DATA_HOME/tetrisplus/scores`, falling back to
+`~/.local/share/tetrisplus/scores`. Directory is created `0700`; failures
 to create or write are swallowed on purpose, because losing a score table must
 never stop the game from being playable.
 
@@ -247,14 +247,14 @@ terminal escape sequences into the UI. Do not relax this.
 Compiles clean with `-Wall -Wextra`. Please keep it that way:
 
 ```sh
-gcc -Wall -Wextra tetris.c -o tetris -lncurses
+gcc -Wall -Wextra tetris.c -o tetrisplus -lncurses
 ```
 
 `tests/run_tests.sh` builds the game, generates the variants described below,
 and runs the three suites against it — 38 checks covering the four mode HUDs,
 scoring, pause, size gating, score-file parsing, and both end conditions
 end-to-end. Build artifacts, the venv and the score tables all go to
-`$TETRIS_WORK` (default `/tmp/terminal-tetris-test`), so the runner never writes
+`$TETRIS_WORK` (default `/tmp/tetrisplus-test`), so the runner never writes
 into the repo. It finishes by asserting `tetris.c` is unchanged from HEAD and
 that the constants the variants shorten still hold their shipped values.
 
@@ -337,11 +337,11 @@ with a version that disagrees with the release it came from.
 ```sh
 # bump the default in build-deb.sh and commit that first
 ./tests/run_tests.sh            # confirms tetris.c is still untouched
-./build-deb.sh                  # -> dist/terminal-tetris_<v>_<arch>.deb
+./build-deb.sh                  # -> dist/tetrisplus_<v>_<arch>.deb
 git tag -a v<v> -m "..."
 git push origin main && git push origin v<v>
-gh release create v<v> --title "terminal-tetris v<v>" \
-    --notes-file <notes> dist/terminal-tetris_<v>_<arch>.deb tetris.c
+gh release create v<v> --title "tetrisplus v<v>" \
+    --notes-file <notes> dist/tetrisplus_<v>_<arch>.deb tetris.c
 ```
 
 `gh release create` marks the newest non-prerelease as Latest automatically, so
@@ -378,7 +378,7 @@ that is fine; it is not a reason to rewrite history.
 
 ## Git
 
-Default branch is `main`. Do not commit the `tetris` binary — it is in
+Default branch is `main`. Do not commit the `tetrisplus` binary — it is in
 `.gitignore` and always will be. The score file lives outside the repo, so it is
 never a commit risk.
 

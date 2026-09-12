@@ -1,8 +1,8 @@
 /*
  * tetris.c -- A complete Tetris for the Linux terminal, built on ncurses.
  *
- * Build:  gcc tetris.c -o tetris -lncurses
- * Run:    ./tetris
+ * Build:  gcc tetris.c -o tetrisplus -lncurses
+ * Run:    ./tetrisplus
  *
  * Controls:
  *   Left / Right   move the falling piece
@@ -446,7 +446,12 @@ static void today(char *buf, size_t len)
         snprintf(buf, len, "0000-00-00");
 }
 
-/* $XDG_DATA_HOME/terminal-tetris, else ~/.local/share/terminal-tetris. */
+/* $XDG_DATA_HOME/tetrisplus, else ~/.local/share/tetrisplus.
+ *
+ * Renamed from "terminal-tetris" with the project. That deliberately orphans
+ * every score table saved under the old name, so this is not a string to
+ * change again: it is the on-disk identity of the table, and moving it costs
+ * every player their high scores. */
 static int scores_dir(char *buf, size_t len)
 {
     const char *base = getenv("XDG_DATA_HOME");
@@ -454,9 +459,9 @@ static int scores_dir(char *buf, size_t len)
     int n;
 
     if (base && base[0] == '/')
-        n = snprintf(buf, len, "%s/terminal-tetris", base);
+        n = snprintf(buf, len, "%s/tetrisplus", base);
     else if ((home = getenv("HOME")) != NULL && home[0] == '/')
-        n = snprintf(buf, len, "%s/.local/share/terminal-tetris", home);
+        n = snprintf(buf, len, "%s/.local/share/tetrisplus", home);
     else
         return -1;
 
@@ -609,7 +614,7 @@ static void save_scores(void)
     if ((f = fopen(path, "w")) == NULL)
         return;
 
-    fprintf(f, "# terminal-tetris high scores\n");
+    fprintf(f, "# tetrisplus high scores\n");
     fprintf(f, "# <mode> <initials> <score> <level> <lines> <date> [<elapsed_ms>]\n");
 
     for (int m = 0; m < NUM_MODES; m++)
@@ -1312,7 +1317,7 @@ int main(void)
     int mode = 0;
 
     if (initscr() == NULL) {
-        fprintf(stderr, "tetris: failed to initialise ncurses\n");
+        fprintf(stderr, "tetrisplus: failed to initialise ncurses\n");
         return 1;
     }
     atexit(cleanup);          /* restore the terminal on any exit path */
