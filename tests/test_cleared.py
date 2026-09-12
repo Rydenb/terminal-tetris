@@ -117,7 +117,17 @@ for r in rows:
         print("     " + r.strip())
 order = "".join("F" if "FST" in r else "S" if "SLO" in r else ""
                 for r in rows if "FST" in r or "SLO" in r)
-check("fastest run listed first", order == "FS", "order=%r" % order)
+
+# The board ranks by time, so whichever run holds the smaller time has to be
+# listed first -- and that is not always FST. cleared_run() retries a run that
+# topped out, and elapsed_ms is only stamped on the attempt that actually
+# cleared, so the delay=0 run can end up the slower of the two. Asserting "FS"
+# then contradicts a board that is sorting correctly. Read the expectation off
+# the recorded times instead of assuming the delay decided the race.
+by_time = sorted(sprint, key=lambda r: int(r[-1]))
+expected = "".join("F" if r[1] == "FST" else "S" for r in by_time)
+check("fastest run listed first", order == expected,
+      "order=%r expected=%r" % (order, expected))
 h.close()
 
 print()
