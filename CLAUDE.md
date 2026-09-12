@@ -119,6 +119,16 @@ inside the sandbox. The consequence is that the snap's scores are separate from
 every other install's, and no interface can share them without a hand-reviewed
 `personal-files` grant.
 
+**The snap is amd64 only.** Nothing in `snapcraft.yaml` restricts it — the
+`amd64` in the filename comes from whatever machine ran `snapcraft pack`, and
+`architectures:` is deliberately left out so a build on any host produces a
+snap for that host. Getting arm64 as well means letting Launchpad do the
+building, which is configured on the web rather than in this repo: on the
+snap's page at snapcraft.io, under *Builds*, point it at this GitHub repo and
+add an `arm64` entry to the build set. Launchpad then builds and uploads on
+every push to `main`, and the store serves whichever architectures exist. A
+release cut on an amd64 laptop will not carry arm64 until that is set up.
+
 ## Run
 
 ```sh
