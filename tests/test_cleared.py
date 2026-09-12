@@ -50,10 +50,20 @@ def attempt(initials, delay):
         if find(rows, "GAME OVER") >= 0:
             outcome = "topout"
             break
-    if outcome == "cleared" and find(h.text(), "NEW HIGH SCORE") >= 0:
-        for ch in initials:
-            h.send(ch.encode(), 0.2)
-        h.send("enter", 0.8)
+    if outcome == "cleared":
+        # CLEARED and the initials prompt are two separate screens:
+        # run_initials_entry() draws its own only once qualifies() says yes.
+        # Sampling the screen once here races that redraw, and a missed prompt
+        # means no initials, so no insert_score() and no save_scores() -- which
+        # does not look like a timing problem at all by the time it surfaces,
+        # as "two sprint entries were saved  got 1". Wait for the prompt.
+        for _ in range(20):
+            if find(h.text(), "NEW HIGH SCORE") >= 0:
+                for ch in initials:
+                    h.send(ch.encode(), 0.2)
+                h.send("enter", 0.8)
+                break
+            h.pump(0.1)
     rows = h.text()
     h.send("q", 1.0)
     h.close()
