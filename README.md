@@ -380,6 +380,7 @@ install.sh    build and install it as `tetris`
 build-deb.sh  package it as a .deb
 snap/         package it as a snap
 packaging/    the man page
+logos/        the project logo
 LICENSE       the PolyForm Noncommercial license
 tests/        pty test suite and its runner
 CLAUDE.md     project memory and conventions
