@@ -54,7 +54,9 @@ description: |
   for a terminal of at least 50x22; anything smaller gets a polite "terminal too
   small" notice instead of a screen full of garbage.
 
-license: MIT
+# An official SPDX identifier (list 3.9), though not OSI-approved: the game is
+# source-available and noncommercial, which is what PolyForm describes.
+license: PolyForm-Noncommercial-1.0.0
 contact: https://github.com/aacanadaa/terminal-tetris/issues
 issues: https://github.com/aacanadaa/terminal-tetris/issues
 source-code: https://github.com/aacanadaa/terminal-tetris

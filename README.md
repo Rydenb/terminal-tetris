@@ -5,7 +5,7 @@
 <p><strong>A complete Tetris game for your terminal, written in C with ncurses.</strong></p>
 
 <p>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-orange.svg" alt="License: PolyForm Noncommercial 1.0.0"></a>
   <a href="https://github.com/aacanadaa/terminal-tetris/actions/workflows/ci.yml"><img src="https://github.com/aacanadaa/terminal-tetris/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="tetris.c"><img src="https://img.shields.io/badge/C-C99-00599C.svg?logo=c&logoColor=white" alt="Written in C99"></a>
   <img src="https://img.shields.io/badge/TUI-ncurses-3A7D44.svg?logo=gnu&logoColor=white" alt="Runs on ncurses">
@@ -343,7 +343,7 @@ tetris.c      the entire game
 install.sh    build and install it as `tetris`
 build-deb.sh  package it as a .deb
 packaging/    the man page
-LICENSE       the MIT license
+LICENSE       the PolyForm Noncommercial license
 tests/        pty test suite and its runner
 CLAUDE.md     project memory and conventions
 README.md     this file
@@ -351,4 +351,13 @@ README.md     this file
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Do whatever you like with it.
+[PolyForm Noncommercial 1.0.0](LICENSE) — source-available, not open source.
+
+You may read, run, modify and share this for any **noncommercial** purpose:
+personal use, study, hobby projects, and use by charities, schools, public
+research bodies, health and safety organisations and government institutions.
+Commercial use is not permitted.
+
+Copies released before this license was adopted were published under the MIT
+license, and that grant cannot be withdrawn — those versions stay MIT, and so
+does anything already forked from them.
